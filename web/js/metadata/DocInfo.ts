@@ -9,6 +9,7 @@ import {ISODateTimeString, ISODateString} from './ISODateTimeStrings';
 import {Tag} from '../tags/Tag';
 import {Hashcode} from './Hashcode';
 import {UUID} from './UUID';
+import {ReadingOverview} from './ReadingOverview';
 
 export class DocInfo extends SerializedObject implements IDocInfo {
 
@@ -41,6 +42,8 @@ export class DocInfo extends SerializedObject implements IDocInfo {
     public storedResources?: Set<StoredResource>;
     public mutating?: boolean;
     public published?: ISODateString | ISODateTimeString;
+    public doi?: string;
+    public readingPerDay?: ReadingOverview;
 
     constructor(val: IDocInfo) {
 
@@ -225,6 +228,10 @@ export interface IDocInfo {
      * opengraph information.
      */
     published?: ISODateString | ISODateTimeString;
+
+    doi?: string;
+
+    readingPerDay?: ReadingOverview;
 
 }
 

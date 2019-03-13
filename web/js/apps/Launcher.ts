@@ -46,34 +46,44 @@ export class Launcher {
         await Logging.init();
 
         const model = new Model(persistenceLayer);
-        new WebView(model).start();
+
+        new PagemarkView(model).start();
+        new WebView(model, persistenceLayer.datastore.getPrefs()).start();
         new TextHighlightView2(model).start();
         new AreaHighlightView(model).start();
-        new PagemarkView(model).start();
         new AnnotationSidebarService(model).start();
 
-        if (AppRuntime.isElectron()) {
-            new PageSearchController(model).start();
-        }
+        // if (AppRuntime.isElectron()) {
+        //     new PageSearchController(model).start();
+        // }
 
         new CommentsController(model).start();
         new AnnotationBarService(model).start();
 
         const viewer = ViewerFactory.create(model);
-        viewer.start();
-
         await new WebController(model, viewer).start();
+
+        viewer.start();
 
     }
 
     public async launch() {
 
         if (document.readyState === "interactive" || document.readyState === "complete") {
+
             log.info("Already completed loading.");
             await this.trigger();
+
         } else {
+
             log.info("Waiting for DOM content to load");
-            document.addEventListener('DOMContentLoaded', this.trigger.bind(this), true);
+
+            document.addEventListener('DOMContentLoaded', () => {
+
+                this.trigger()
+                    .catch(err => log.error("Failed to trigger: ", err));
+
+            }, true);
         }
 
     }

@@ -1,19 +1,13 @@
 import * as React from 'react';
-import ReactTable from "react-table";
-import {Footer, Tips} from '../Utils';
+import ReactTable, {ColumnRenderProps} from "react-table";
 import {Logger} from '../../../../web/js/logger/Logger';
-import {Strings} from '../../../../web/js/util/Strings';
 import {RepoDocMetaLoader} from '../RepoDocMetaLoader';
 import {RepoDocInfo} from '../RepoDocInfo';
-import {RepoDocInfos} from '../RepoDocInfos';
 import {RepoDocMetaManager} from '../RepoDocMetaManager';
 import {TagInput} from '../TagInput';
 import {Optional} from '../../../../web/js/util/ts/Optional';
 import {Tag} from '../../../../web/js/tags/Tag';
-import {FilterTagInput} from '../FilterTagInput';
-import {FilteredTags} from '../FilteredTags';
 import {isPresent} from '../../../../web/js/Preconditions';
-import {Sets} from '../../../../web/js/util/Sets';
 import {Tags} from '../../../../web/js/tags/Tags';
 import {DateTimeTableCell} from '../DateTimeTableCell';
 import {RendererAnalytics} from '../../../../web/js/ga/RendererAnalytics';
@@ -22,7 +16,6 @@ import {DocDropdown} from '../DocDropdown';
 import {DocRepoTableDropdown} from './DocRepoTableDropdown';
 import {DocRepoTableColumns} from './DocRepoTableColumns';
 import {SettingsStore} from '../../../../web/js/datastore/SettingsStore';
-import {Version} from '../../../../web/js/util/Version';
 import {RepoDocInfoIndex} from '../RepoDocInfoIndex';
 import {IDocInfo} from '../../../../web/js/metadata/DocInfo';
 import {SyncBarProgress} from '../../../../web/js/ui/sync_bar/SyncBar';
@@ -32,15 +25,27 @@ import {Hashcode} from '../../../../web/js/metadata/Hashcode';
 import {RepoDocMetaLoaders} from '../RepoDocMetaLoaders';
 import {PersistenceLayerManagers} from '../../../../web/js/datastore/PersistenceLayerManagers';
 import {SynchronizingDocLoader} from '../util/SynchronizingDocLoader';
-import {ToggleButton} from '../../../../web/js/ui/ToggleButton';
-import {DropdownItem, DropdownMenu, DropdownToggle, Input, InputGroup, UncontrolledDropdown} from 'reactstrap';
 import ReleasingReactComponent from '../framework/ReleasingReactComponent';
 import {Arrays} from '../../../../web/js/util/Arrays';
 import {Numbers} from '../../../../web/js/util/Numbers';
-import {Tooltip} from '../../../../web/js/ui/tooltip/Tooltip';
+import {SimpleTooltip} from '../../../../web/js/ui/tooltip/SimpleTooltip';
 import {TagButton} from './TagButton';
-import {RepoHeader} from '../RepoHeader';
+import {RepoHeader} from '../repo_header/RepoHeader';
 import {remote} from 'electron';
+import {FixedNav, FixedNavBody} from '../FixedNav';
+import {AddContentButton} from './AddContentButton';
+import {ListOptionType} from '../../../../web/js/ui/list_selector/ListSelector';
+import {NULL_FUNCTION} from '../../../../web/js/util/Functions';
+import {DocButton} from './doc_buttons/DocButton';
+import {FlagDocButton} from './doc_buttons/FlagDocButton';
+import {ArchiveDocButton} from './doc_buttons/ArchiveDocButton';
+import {MultiDeleteButton} from './multi_buttons/MultiDeleteButton';
+import {DocRepoFilterBar} from './DocRepoFilterBar';
+import {FilteredRepoDocInfoIndex, RefreshedCallback} from './FilteredRepoDocInfoIndex';
+import {AppRuntime} from '../../../../web/js/AppRuntime';
+import {Toaster} from '../../../../web/js/ui/toaster/Toaster';
+import Input from 'reactstrap/lib/Input';
+import {Settings} from '../../../../web/js/datastore/Settings';
 
 const log = Logger.create();
 
@@ -52,17 +57,13 @@ export default class DocRepoTable extends ReleasingReactComponent<IProps, IState
 
     private readonly persistenceLayerManager: PersistenceLayerManager;
 
-    private readonly filteredTags = new FilteredTags();
-
     private readonly syncBarProgress: IEventDispatcher<SyncBarProgress> = new SimpleReactor();
 
     private readonly synchronizingDocLoader: SynchronizingDocLoader;
 
-    private filterArchived = true;
-
-    private filterFlaggedOnly = false;
-
     private reactTable: any;
+
+    private readonly filteredRepoDocInfoIndex: FilteredRepoDocInfoIndex;
 
     constructor(props: IProps, context: any) {
         super(props, context);
@@ -74,12 +75,16 @@ export default class DocRepoTable extends ReleasingReactComponent<IProps, IState
         this.onDocDeleted = this.onDocDeleted.bind(this);
         this.onDocSetTitle = this.onDocSetTitle.bind(this);
         this.onSelectedColumns = this.onSelectedColumns.bind(this);
-        this.onFilterByTitle = this.onFilterByTitle.bind(this);
 
+        this.onFilterByTitle = this.onFilterByTitle.bind(this);
         this.onToggleFilterArchived = this.onToggleFilterArchived.bind(this);
         this.onToggleFlaggedOnly = this.onToggleFlaggedOnly.bind(this);
 
+        this.clearSelected = this.clearSelected.bind(this);
+
         this.onMultiTagged = this.onMultiTagged.bind(this);
+        this.onMultiDeleted = this.onMultiDeleted.bind(this);
+
         this.getSelected = this.getSelected.bind(this);
 
         this.cmdImportFromDisk = this.cmdImportFromDisk.bind(this);
@@ -91,11 +96,17 @@ export default class DocRepoTable extends ReleasingReactComponent<IProps, IState
             selected: []
         };
 
+        const onRefreshed: RefreshedCallback = repoDocInfos => this.doRefresh(repoDocInfos);
+
+        const repoDocInfosProvider = () => Object.values(this.props.repoDocMetaManager!.repoDocInfoIndex);
+
+        this.filteredRepoDocInfoIndex =
+            new FilteredRepoDocInfoIndex(onRefreshed, repoDocInfosProvider);
+
         this.init();
 
         this.initAsync()
             .catch(err => log.error("Could not init: ", err));
-
 
     }
 
@@ -130,16 +141,18 @@ export default class DocRepoTable extends ReleasingReactComponent<IProps, IState
 
     private async initAsync(): Promise<void> {
 
-        const settings = await SettingsStore.load();
+        const settingProvider = await SettingsStore.load();
 
-        log.info("Settings loaded: ", settings);
+        log.info("Settings loaded: ", settingProvider);
 
-        Optional.of(settings.documentRepository)
+        Optional.of(settingProvider().documentRepository)
             .map(current => current.columns)
             .when(columns => {
 
+                // columns = Object.assign( new DocRepoTableColumns(), columns);
+
                 log.info("Loaded columns from settings: ", columns);
-                this.setState(Object.assign(this.state, {columns}));
+                this.setState({...this.state, columns});
                 this.refresh();
 
             });
@@ -150,7 +163,7 @@ export default class DocRepoTable extends ReleasingReactComponent<IProps, IState
 
     private emitInitAnalytics(repoDocs: RepoDocInfoIndex) {
 
-        RendererAnalytics.pageview("/");
+        // TODO: move some of these analytics into the main RepoaitoryApp.tsx.
 
         const nrDocs = Object.keys(repoDocs).length;
 
@@ -160,11 +173,9 @@ export default class DocRepoTable extends ReleasingReactComponent<IProps, IState
 
         RendererAnalytics.event({category: 'document-repository', action: `docs-loaded-${persistenceLayerType}-${nrDocs}`});
 
-        RendererAnalytics.event({category: 'app', action: 'version-' + Version.get()});
-
     }
 
-    public selectRow(selectedIdx: number, event: MouseEvent) {
+    public selectRow(selectedIdx: number, event: MouseEvent, checkbox: boolean = false) {
 
         if (typeof selectedIdx === 'string') {
             selectedIdx = parseInt(selectedIdx);
@@ -172,7 +183,7 @@ export default class DocRepoTable extends ReleasingReactComponent<IProps, IState
 
         let selected: number[] = [selectedIdx];
 
-        if (event.shiftKey) {
+        if (event.getModifierState("Shift")) {
 
             // select a range
 
@@ -190,7 +201,9 @@ export default class DocRepoTable extends ReleasingReactComponent<IProps, IState
 
         }
 
-        if (event.ctrlKey) {
+        const selectIndividual = (event.getModifierState("Control") || event.getModifierState("Meta")) || checkbox;
+
+        if (selectIndividual) {
 
             // one at a time
 
@@ -215,8 +228,31 @@ export default class DocRepoTable extends ReleasingReactComponent<IProps, IState
         for (const repoDocInfo of repoDocInfos) {
             const existingTags = Object.values(repoDocInfo.tags || {});
             const effectTags = Tags.union(existingTags, tags || []);
-            this.onDocTagged(repoDocInfo, effectTags);
+
+            this.onDocTagged(repoDocInfo, effectTags)
+                .catch(err => log.error(err));
+
         }
+
+    }
+
+    private onMultiDeleted() {
+
+        const repoDocInfos = this.getSelected();
+
+        for (const repoDocInfo of repoDocInfos) {
+            this.onDocDeleted(repoDocInfo);
+        }
+
+        this.clearSelected();
+
+    }
+
+    private clearSelected() {
+
+        setTimeout(() => {
+            this.setState({...this.state, selected: []});
+        }, 1);
 
     }
 
@@ -229,6 +265,7 @@ export default class DocRepoTable extends ReleasingReactComponent<IProps, IState
         const result: RepoDocInfo[] =
             this.state.selected
                 .map(selectedIdx => sortedData[selectedIdx])
+                .filter(item => isPresent(item))
                 .map(item => item._original);
 
         return result;
@@ -239,7 +276,7 @@ export default class DocRepoTable extends ReleasingReactComponent<IProps, IState
         const { data } = this.state;
         return (
 
-            <div id="doc-repo-table">
+            <FixedNav id="doc-repo-table">
 
                 <header>
 
@@ -255,24 +292,8 @@ export default class DocRepoTable extends ReleasingReactComponent<IProps, IState
                                 <div className="mr-1"
                                      style={{whiteSpace: 'nowrap', marginTop: 'auto', marginBottom: 'auto'}}>
 
-                                    <UncontrolledDropdown id="add-content-button"
-                                                          direction="down"
-                                                          size="sm">
-
-                                        <DropdownToggle style={{fontWeight: 'bold'}} color="success" caret>
-                                            <i className="fas fa-plus" style={{marginRight: '5px'}}></i> Add &nbsp;
-                                        </DropdownToggle>
-                                        <DropdownMenu>
-                                            <DropdownItem size="sm" onClick={() => this.cmdImportFromDisk()}>
-                                                <i className="fas fa-hdd"></i>
-                                                &nbsp; Import from Disk
-                                            </DropdownItem>
-                                            <DropdownItem size="sm" onClick={() => this.cmdCaptureWebPage()}>
-                                                <i className="fab fa-chrome"></i>
-                                                &nbsp; Capture Web Page
-                                            </DropdownItem>
-                                        </DropdownMenu>
-                                    </UncontrolledDropdown>
+                                    <AddContentButton importFromDisk={() => this.cmdImportFromDisk()}
+                                                      captureWebPage={this.cmdCaptureWebPage}/>
 
                                 </div>
 
@@ -280,15 +301,37 @@ export default class DocRepoTable extends ReleasingReactComponent<IProps, IState
                                 <div className="mr-1"
                                      style={{whiteSpace: 'nowrap', marginTop: 'auto', marginBottom: 'auto'}}>
 
-                                    <div style={{display: this.state.selected.length <= 1 ? 'none' : 'block'}}>
+                                    <div style={{display: this.state.selected.length <= 1 ? 'none' : 'flex'}}>
 
                                         {/*<FilterTagInput tagsDBProvider={() => this.props.repoDocMetaManager!.tagsDB}*/}
                                                         {/*refresher={() => this.refresh()}*/}
                                                         {/*disabled={this.state.selected.length === 0}*/}
                                                         {/*filteredTags={this.filteredTags} />*/}
 
-                                        <TagButton tagsDBProvider={() => this.props.repoDocMetaManager!.tagsDB}
-                                                   onSelectedTags={tags => this.onMultiTagged(tags)}/>
+                                        <div>
+
+                                            <TagButton id="tag-multiple-documents"
+                                                       tagsDBProvider={() => this.props.repoDocMetaManager!.tagsDB}
+                                                       onSelectedTags={tags => this.onMultiTagged(tags)}/>
+
+                                            <SimpleTooltip target="tag-multiple-documents"
+                                                           placement="bottom">
+
+                                                Tag multiple documents at once.  To
+                                                find untagged documents sort by the
+                                                'Tags' column (twice).  Once to sort
+                                                alphabetically and then second click
+                                                will reverse the sort showing
+                                                untagged documents.
+
+                                            </SimpleTooltip>
+
+                                        </div>
+
+                                        <div className="ml-1">
+                                            <MultiDeleteButton onCancel={NULL_FUNCTION}
+                                                               onConfirm={() => this.onMultiDeleted()}/>
+                                        </div>
 
                                     </div>
 
@@ -296,91 +339,28 @@ export default class DocRepoTable extends ReleasingReactComponent<IProps, IState
 
                             </div>
 
-                            <div style={{width: '100%'}}>
+                            <div style={{marginLeft: 'auto'}}>
 
-                                <div style={{display: 'flex', justifyContent: 'flex-end'}}>
+                                <DocRepoFilterBar onToggleFlaggedOnly={value => this.onToggleFlaggedOnly(value)}
+                                                  onToggleFilterArchived={value => this.onToggleFilterArchived(value)}
+                                                  onFilterByTitle={(title) => this.onFilterByTitle(title)}
+                                                  tagsDBProvider={() => this.props.repoDocMetaManager!.tagsDB}
+                                                  refresher={() => this.refresh()}
+                                                  filteredTags={this.filteredRepoDocInfoIndex.filters.filteredTags}
+                                                  right={
+                                               <div className=""
+                                                    style={{whiteSpace: 'nowrap', marginTop: 'auto', marginBottom: 'auto'}}>
 
-                                    <div className="mr-2"
-                                         style={{whiteSpace: 'nowrap', marginTop: 'auto', marginBottom: 'auto'}}>
-
-                                        <div className="checkbox-group">
-
-                                            <ToggleButton id="toggle-flagged"
-                                                          label="flagged only"
-                                                          initialValue={false}
-                                                          onChange={value => this.onToggleFlaggedOnly(value)}/>
-
-                                            <Tooltip target="toggle-flagged">Toggle showing flagged documents</Tooltip>
-
-                                        </div>
-
-                                    </div>
-
-                                    <div className="header-filter-box mr-1"
-                                         style={{whiteSpace: 'nowrap', marginTop: 'auto', marginBottom: 'auto'}}>
-
-                                        <div className="checkbox-group">
-
-                                            <ToggleButton id="toggle-archived"
-                                                          label="hide archived"
-                                                          initialValue={true}
-                                                          onChange={value => this.onToggleFilterArchived(value)}/>
-
-                                            <Tooltip target="toggle-archived">Toggle showing archived documents</Tooltip>
-
-                                        </div>
-
-                                    </div>
-
-                                    <div className="header-filter-box header-filter-tags mr-1"
-                                         style={{whiteSpace: 'nowrap', marginTop: 'auto', marginBottom: 'auto'}}>
-
-                                        <FilterTagInput tagsDBProvider={() => this.props.repoDocMetaManager!.tagsDB}
-                                                        refresher={() => this.refresh()}
-                                                        filteredTags={this.filteredTags} />
-
-                                    </div>
-
-
-                                    <div className="header-filter-box mr-1"
-                                         style={{whiteSpace: 'nowrap', marginTop: 'auto', marginBottom: 'auto'}}>
-
-                                        <div className="header-filter-box">
-
-                                            <InputGroup size="sm">
-
-                                                {/*<InputGroupAddon addonType="prepend">*/}
-                                                {/*A*/}
-                                                {/*</InputGroupAddon>*/}
-
-                                                <Input id="filter_title"
-                                                       type="text"
-                                                       placeholder="Filter by title"
-                                                       onChange={() => this.onFilterByTitle()}/>
-
-                                            </InputGroup>
-
-                                        </div>
-
-                                    </div>
-
-
-
-                                    <div className=""
-                                         style={{whiteSpace: 'nowrap', marginTop: 'auto', marginBottom: 'auto'}}>
-
-                                        <DocRepoTableDropdown id="table-dropdown"
-                                                              options={Object.values(this.state.columns)}
-                                                              onSelectedColumns={() => this.onSelectedColumns()}/>
-                                    </div>
-
-                                </div>
+                                                   <DocRepoTableDropdown id="table-dropdown"
+                                                                         options={Object.values(this.state.columns)}
+                                                                         onSelectedColumns={(selectedColumns) => this.onSelectedColumns(selectedColumns)}/>
+                                               </div>
+                                           }
+                                />
 
                             </div>
 
                         </div>
-
-
 
                     </div>
 
@@ -388,342 +368,438 @@ export default class DocRepoTable extends ReleasingReactComponent<IProps, IState
 
                 </header>
 
-                <div id="doc-table">
-                <ReactTable
-                    data={data}
-                    ref={(r: any) => this.reactTable = r}
-                    columns={
-                        [
-                            {
-                                Header: 'Title',
-                                accessor: 'title',
-                                Cell: (row: any) => {
-                                    const id = 'doc-repo-row-title' + row.index;
-                                    return (
-                                        <div id={id}>
+                <FixedNavBody>
+                    <div id="doc-table" style={{height: '100%'}}>
+                        <ReactTable
+                            data={data}
+                            ref={(r: any) => this.reactTable = r}
+                            columns={
+                                [
+                                    {
 
-                                            <div>{row.value}</div>
+                                        id: 'doc-checkbox',
+                                        Header: (col: ColumnRenderProps) => {
+                                            // TODO: move to a PureComponent to
+                                            // improve performance
 
-                                            {/*TODO: this doesn't reliably work as*/}
-                                            {/*moving the mouse horizontally within*/}
-                                            {/*the target doesn't close the tooltip.*/}
+                                            const checked = this.state.selected.length === col.data.length && col.data.length > 0;
 
-                                                {/*<UncontrolledTooltip style={{maxWidth: '1000px'}}*/}
-                                                                     {/*placement="bottom"*/}
-                                                                     {/*delay={{show: 750, hide: 0}}*/}
-                                                                     {/*target={id}>*/}
+                                            return (<div>
+
+                                                <Input checked={checked}
+                                                       style={{
+                                                           marginLeft: 'auto',
+                                                           marginRight: 'auto',
+                                                           margin: 'auto',
+                                                           position: 'relative',
+                                                           top: '2px',
+                                                           width: '16px',
+                                                           height: '16px',
+                                                       }}
+                                                       className="m-auto"
+                                                       onChange={NULL_FUNCTION}
+                                                       onClick={() => {
+                                                           // noop... now do we
+                                                           // select ALL the
+                                                           // items in the
+                                                           // state now
+
+                                                           const computeSelected = (): ReadonlyArray<number> => {
+
+                                                               if (this.state.selected.length !== col.data.length) {
+                                                                   // all of
+                                                                   // them
+                                                                   return Numbers.range(0, col.data.length - 1);
+                                                               } else {
+                                                                   // none of
+                                                                   // them
+                                                                   return [];
+                                                               }
+
+                                                           };
+
+                                                           const selected = computeSelected();
+
+                                                           this.setState({...this.state, selected});
+
+                                                       }}
+                                                       type="checkbox"/>
+
+                                            </div>);
+                                        },
+                                        accessor: '',
+                                        maxWidth: 25,
+                                        defaultSortDesc: true,
+                                        resizable: false,
+                                        sortable: false,
+                                        className: 'doc-checkbox',
+                                        Cell: (row: any) => {
+                                            // TODO: move to a PureComponent to
+                                            // improve performance
+
+                                            const viewIndex = row.viewIndex as number;
+
+                                            return (<div style={{lineHeight: '1em'}}>
+
+                                                <Input checked={this.state.selected.includes(viewIndex)}
+                                                       style={{
+                                                           marginLeft: 'auto',
+                                                           marginRight: 'auto',
+                                                           margin: 'auto',
+                                                           position: 'relative',
+                                                           top: '2px',
+                                                           width: '16px',
+                                                           height: '16px',
+                                                       }}
+                                                       className="m-auto"
+                                                       onChange={NULL_FUNCTION}
+                                                       onClick={(event) => this.selectRow(viewIndex, event.nativeEvent, true)}
+                                                       type="checkbox"/>
+
+                                                {/*<i className="far fa-square"></i>*/}
+
+                                            </div>);
+                                        }
+                                    },
+                                    {
+                                        Header: 'Title',
+                                        accessor: 'title',
+                                        className: 'doc-table-col-title',
+                                        Cell: (row: any) => {
+                                            const id = 'doc-repo-row-title' + row.index;
+                                            return (
+                                                <div id={id}>
+
+                                                    <div>{row.value}</div>
+
+                                                    {/*TODO: this doesn't reliably work as*/}
+                                                    {/*moving the mouse horizontally within*/}
+                                                    {/*the target doesn't close the tooltip.*/}
+
+                                                    {/*<UncontrolledTooltip style={{maxWidth: '1000px'}}*/}
+                                                    {/*placement="bottom"*/}
+                                                    {/*delay={{show: 750, hide: 0}}*/}
+                                                    {/*target={id}>*/}
                                                     {/*<Collapse timeout={{ enter: 0, exit: 0 }} >*/}
-                                                        {/*{row.value}*/}
+                                                    {/*{row.value}*/}
                                                     {/*</Collapse>*/}
 
-                                                {/*</UncontrolledTooltip>*/}
+                                                    {/*</UncontrolledTooltip>*/}
 
-                                        </div>
+                                                </div>
 
-                                    );
+                                            );
+                                        }
+
+                                    },
+                                    {
+                                        Header: 'Updated',
+                                        // accessor: (row: any) => row.added,
+                                        accessor: 'lastUpdated',
+                                        show: this.state.columns.lastUpdated.selected,
+                                        maxWidth: 85,
+                                        defaultSortDesc: true,
+                                        className: 'doc-table-col-updated',
+                                        Cell: (row: any) => (
+                                            <DateTimeTableCell className="doc-col-last-updated" datetime={row.value}/>
+                                        )
+
+                                    },
+                                    {
+                                        Header: 'Added',
+                                        accessor: 'added',
+                                        show: this.state.columns.added.selected,
+                                        maxWidth: 85,
+                                        defaultSortDesc: true,
+                                        className: 'doc-table-col-added',
+                                        Cell: (row: any) => (
+                                            <DateTimeTableCell className="doc-col-added" datetime={row.value}/>
+                                        )
+                                    },
+                                    {
+                                        Header: 'Site',
+                                        accessor: 'site',
+                                        show: (this.state.columns.site || {}).selected || false,
+                                        // show: false,
+                                        maxWidth: 200,
+                                        sortable: false,
+                                        sortMethod: (a: RepoDocInfo, b: RepoDocInfo) => {
+
+                                            const toSTR = (doc?: RepoDocInfo): string => {
+
+                                                if (! doc) {
+                                                    return "";
+                                                }
+
+                                                if (doc.site) {
+                                                    return doc.site;
+                                                }
+
+                                                return "";
+
+                                            };
+
+                                            const aSTR = toSTR(a);
+                                            const bSTR = toSTR(b);
+
+                                            // if (aSTR === bSTR) {
+                                            //     return 0;
+                                            // }
+                                            //
+                                            // if (aSTR === "") {
+                                            //     return Number.MIN_VALUE;
+                                            // }
+                                            //
+                                            // if (bSTR === "") {
+                                            //     return Number.MAX_VALUE;
+                                            // }
+
+                                            return aSTR.localeCompare(bSTR);
+
+                                        },
+                                    },
+                                    //
+                                    // d => {
+                                    //     return Moment(d.updated_at)
+                                    //         .local()
+                                    //         .format("DD-MM-YYYY hh:mm:ss a")
+                                    // }
+
+                                    // {
+                                    //     Header: 'Last Name',
+                                    //     id: 'lastName',
+                                    //     accessor: (d: any) => d.lastName
+                                    // },
+                                    {
+                                        id: 'tags',
+                                        Header: 'Tags',
+                                        width: 250,
+                                        accessor: '',
+                                        show: this.state.columns.tags.selected,
+                                        className: 'doc-table-col-tags',
+                                        sortMethod: (a: RepoDocInfo, b: RepoDocInfo) => {
+
+                                            const toSTR = (obj: any): string => {
+
+                                                if (! obj) {
+                                                    return "";
+                                                }
+
+                                                if (typeof obj === 'string') {
+                                                    return obj;
+                                                }
+
+                                                return JSON.stringify(obj);
+
+                                            };
+
+                                            const cmp = toSTR(a.tags).localeCompare(toSTR(b.tags));
+
+                                            if (cmp !== 0) {
+                                                return cmp;
+                                            }
+
+                                            // for ties use the date added...
+                                            return toSTR(a.added).localeCompare(toSTR(b.added));
+
+                                        },
+                                        Cell: (row: any) => {
+                                            // TODO: move to a PureComponent to
+                                            // improve performance
+
+                                            const tags: {[id: string]: Tag} = row.original.tags;
+
+                                            const formatted = Object.values(tags)
+                                                .map(tag => tag.label)
+                                                .sort()
+                                                .join(", ");
+
+                                            return (
+                                                <div>{formatted}</div>
+                                            );
+
+                                        }
+                                    },
+                                    {
+                                        id: 'nrAnnotations',
+                                        Header: 'Annotations',
+                                        accessor: 'nrAnnotations',
+                                        maxWidth: 110,
+                                        show: this.state.columns.nrAnnotations.selected,
+                                        defaultSortDesc: true,
+                                        resizable: false,
+                                    },
+                                    {
+                                        id: 'progress',
+                                        Header: 'Progress',
+                                        accessor: 'progress',
+                                        show: this.state.columns.progress.selected,
+                                        maxWidth: 100,
+                                        defaultSortDesc: true,
+                                        resizable: false,
+                                        className: 'doc-table-col-progress',
+                                        Cell: (row: any) => (
+                                            // TODO: move to a PureComponent to
+                                            // improve performance
+
+                                            <progress className="mt-auto mb-auto" max="100" value={ row.value } style={{
+                                                width: '100%'
+                                            }} />
+
+                                        )
+                                    },
+                                    {
+                                        id: 'doc-buttons',
+                                        Header: '',
+                                        accessor: '',
+                                        maxWidth: 100,
+                                        defaultSortDesc: true,
+                                        resizable: false,
+                                        sortable: false,
+                                        className: 'doc-dropdown',
+                                        Cell: (row: any) => {
+
+                                            // TODO: move to a PureComponent to
+                                            // improve performance
+
+                                            const repoDocInfo: RepoDocInfo = row.original;
+
+                                            const existingTags: Tag[]
+                                                = Object.values(Optional.of(repoDocInfo.docInfo.tags).getOrElse({}));
+
+                                            return (<div className="doc-buttons" style={{display: 'flex'}}>
+
+                                                    <DocButton>
+
+                                                        {/*WARNING: making this a function breaks the layout...*/}
+
+                                                        <TagInput availableTags={this.props.repoDocMetaManager!.tagsDB.tags()}
+                                                                  existingTags={existingTags}
+                                                                  relatedTags={this.props.repoDocMetaManager!.relatedTags}
+                                                                  onChange={(tags) =>
+                                                                      this.onDocTagged(repoDocInfo, tags)
+                                                                          .catch(err => log.error("Unable to update tags: ", err))}/>
+
+                                                    </DocButton>
+
+                                                    <FlagDocButton active={repoDocInfo.flagged}
+                                                                   onClick={() => this.doHandleToggleField(repoDocInfo, 'flagged')}/>
+
+                                                    <ArchiveDocButton active={repoDocInfo.archived}
+                                                                      onClick={() => this.doHandleToggleField(repoDocInfo, 'archived')}/>
+
+                                                    <DocButton>
+
+                                                        <DocDropdown id={'doc-dropdown-' + row.index}
+                                                                     repoDocInfo={repoDocInfo}
+                                                                     onDelete={this.onDocDeleted}
+                                                                     onSetTitle={this.onDocSetTitle}/>
+
+                                                    </DocButton>
+
+                                                </div>);
+
+                                        }
+                                    }
+
+                                ]}
+
+                            defaultPageSize={50}
+                            noDataText="No documents available."
+                            className="-striped -highlight"
+                            defaultSorted={[
+                                {
+                                    id: "progress",
+                                    desc: true
                                 }
+                            ]}
+                            // sorted={[{
+                            //     id: 'added',
+                            //     desc: true
+                            // }]}
+                            getTrProps={(state: any, rowInfo: any) => {
+                                return {
 
-                            },
-                            {
-                                Header: 'Updated',
-                                // accessor: (row: any) => row.added,
-                                accessor: 'lastUpdated',
-                                show: this.state.columns.lastUpdated.selected,
-                                maxWidth: 100,
-                                defaultSortDesc: true,
-                                Cell: (row: any) => (
-                                    <DateTimeTableCell className="doc-col-last-updated" datetime={row.value}/>
-                                )
+                                    // include the doc fingerprint in the table
+                                    // so that the tour can use
+                                    'data-doc-fingerprint': ((rowInfo || {}).original || {}).fingerprint || '',
 
-                            },
-                            {
-                                Header: 'Added',
-                                // accessor: (row: any) => row.added,
-                                accessor: 'added',
-                                show: this.state.columns.added.selected,
-                                maxWidth: 100,
-                                defaultSortDesc: true,
-                                Cell: (row: any) => (
-                                    <DateTimeTableCell className="doc-col-added" datetime={row.value}/>
-                                )
-                            },
-                            //
-                            // d => {
-                            //     return Moment(d.updated_at)
-                            //         .local()
-                            //         .format("DD-MM-YYYY hh:mm:ss a")
-                            // }
+                                    style: {
+                                        // TODO: dark-mode.  Use CSS variable
+                                        // names for colors
 
-                            // {
-                            //     Header: 'Last Name',
-                            //     id: 'lastName',
-                            //     accessor: (d: any) => d.lastName
-                            // },
-                            {
-                                id: 'tags',
-                                Header: 'Tags',
-                                accessor: '',
-                                show: this.state.columns.tags.selected,
+                                        background: rowInfo && this.state.selected.includes(rowInfo.viewIndex) ? 'var(--selected-background-color)' : 'var(--primary-background-color)',
+                                        color: rowInfo && this.state.selected.includes(rowInfo.viewIndex) ? 'var(--selected-text-color)' : 'var(--primary-text-color)',
+                                    }
 
-                                sortMethod: (a: RepoDocInfo, b: RepoDocInfo) => {
+                                };
+                            }}
+                            getTdProps={(state: any, rowInfo: any, column: any, instance: any) => {
 
-                                    const toSTR = (obj: any): string => {
+                                const SINGLE_CLICK_COLUMNS = [
+                                    'tag-input',
+                                    'flagged',
+                                    'archived',
+                                    'doc-dropdown',
+                                    'doc-buttons',
+                                    'doc-checkbox'
+                                ];
 
-                                        if (! obj) {
-                                            return "";
-                                        }
+                                if (! SINGLE_CLICK_COLUMNS.includes(column.id)) {
 
-                                        if (typeof obj === 'string') {
-                                            return obj;
-                                        }
+                                    return {
 
-                                        return JSON.stringify(obj);
+                                        onDoubleClick: (event: MouseEvent) => {
+
+                                            if (rowInfo) {
+                                                this.onDocumentLoadRequested(rowInfo.original.fingerprint,
+                                                                             rowInfo.original.filename,
+                                                                             rowInfo.original.hashcode);
+                                            }
+
+                                        },
+
+                                        onClick: (event: MouseEvent, handleOriginal?: () => void) => {
+
+                                            if (rowInfo) {
+                                                this.selectRow(rowInfo.viewIndex as number, event);
+                                            }
+
+                                        },
 
                                     };
 
-                                    const cmp = toSTR(a.tags).localeCompare(toSTR(b.tags));
+                                }
 
-                                    if (cmp !== 0) {
-                                        return cmp;
-                                    }
+                                if (SINGLE_CLICK_COLUMNS.includes(column.id)) {
 
-                                    // for ties use the date added...
-                                    return toSTR(a.added).localeCompare(toSTR(b.added));
+                                    return {
 
-                                },
-                                Cell: (row: any) => {
+                                        onClick: ((e: any, handleOriginal?: () => void) => {
 
-                                    const tags: {[id: string]: Tag} = row.original.tags;
+                                            if (handleOriginal) {
+                                                // needed for react table to
+                                                // function properly.
+                                                handleOriginal();
+                                            }
 
-                                    const formatted = Object.values(tags)
-                                        .map(tag => tag.label)
-                                        .sort()
-                                        .join(", ");
+                                        })
 
-                                    return (
-                                        <div>{formatted}</div>
-                                    );
+                                    };
 
                                 }
-                            },
-                            {
-                                id: 'nrAnnotations',
-                                Header: 'Annotations',
-                                accessor: 'nrAnnotations',
-                                maxWidth: 110,
-                                show: this.state.columns.nrAnnotations.selected,
-                                defaultSortDesc: true,
-                                resizable: false,
-                            },
-                            {
-                                id: 'progress',
-                                Header: 'Progress',
-                                accessor: 'progress',
-                                show: this.state.columns.progress.selected,
-                                maxWidth: 100,
-                                defaultSortDesc: true,
-                                resizable: false,
-                                Cell: (row: any) => (
 
-                                    <progress max="100" value={ row.value } style={{
-                                        width: '100%'
-                                    }} />
-                                )
-                            },
-                            {
-                                id: 'tag-input',
-                                Header: '',
-                                accessor: '',
-                                maxWidth: 25,
-                                defaultSortDesc: true,
-                                resizable: false,
-                                Cell: (row: any) => {
+                                return {};
 
-                                    const repoDocInfo: RepoDocInfo = row.original;
+                            }}
 
-                                    const existingTags: Tag[]
-                                        = Object.values(Optional.of(repoDocInfo.docInfo.tags).getOrElse({}));
+                        />
+                    </div>
 
-                                    return (
-                                        <TagInput availableTags={this.props.repoDocMetaManager!.tagsDB.tags()}
-                                                  existingTags={existingTags}
-                                                  relatedTags={this.props.repoDocMetaManager!.relatedTags}
-                                                  onChange={(tags) =>
-                                                      this.onDocTagged(repoDocInfo, tags)
-                                                          .catch(err => log.error("Unable to update tags: ", err))} />
-                                    );
-
-                                }
-                            },
-                            {
-                                id: 'flagged',
-                                Header: '',
-                                accessor: 'flagged',
-                                show: this.state.columns.flagged.selected,
-                                maxWidth: 25,
-                                defaultSortDesc: true,
-                                resizable: false,
-                                Cell: (row: any) => {
-
-                                    const title = 'Flag document';
-
-                                    if (row.original.flagged) {
-                                        return (
-                                            <i className="fa fa-flag doc-button doc-button-active" title={title}/>
-                                        );
-                                    } else {
-                                        return (
-                                            <i className="fa fa-flag doc-button doc-button-inactive" title={title}/>
-                                        );
-                                    }
-
-                                }
-                            },
-                            {
-                                id: 'archived',
-                                Header: '',
-                                accessor: 'archived',
-                                show: this.state.columns.archived.selected,
-                                maxWidth: 25,
-                                defaultSortDesc: true,
-                                resizable: false,
-                                Cell: (row: any) => {
-
-                                    const title = 'Archive document';
-
-                                    const uiClassName = row.original.archived ? 'doc-button-active' : 'doc-button-inactive';
-
-                                    const className = `fa fa-check doc-button ${uiClassName}`;
-
-                                    return (
-                                        <i className={className} title={title}/>
-                                    );
-
-                                }
-                            },
-                            {
-                                id: 'doc-dropdown',
-                                Header: '',
-                                accessor: '',
-                                maxWidth: 25,
-                                defaultSortDesc: true,
-                                resizable: false,
-                                sortable: false,
-                                className: 'doc-dropdown',
-                                Cell: (row: any) => {
-
-                                    const repoDocInfo: RepoDocInfo = row.original;
-
-                                    return (
-                                        <DocDropdown id={'doc-dropdown-' + row.index}
-                                                     repoDocInfo={repoDocInfo}
-                                                     onDelete={this.onDocDeleted}
-                                                     onSetTitle={this.onDocSetTitle}/>
-                                    );
-
-                                }
-                            }
+                </FixedNavBody>
 
 
-
-
-                        ]}
-
-                    defaultPageSize={50}
-                    noDataText="No documents available."
-                    className="-striped -highlight"
-                    defaultSorted={[
-                        {
-                            id: "progress",
-                            desc: true
-                        }
-                    ]}
-                    // sorted={[{
-                    //     id: 'added',
-                    //     desc: true
-                    // }]}
-                    getTrProps={(state: any, rowInfo: any) => {
-                        return {
-
-                            onClick: (event: MouseEvent) => {
-                                // console.log(`doc fingerprint:
-                                // ${rowInfo.original.fingerprint} and filename
-                                // ${rowInfo.original.filename}`);
-                                this.selectRow(rowInfo.viewIndex as number, event);
-                            },
-
-                            style: {
-                                // TODO: dark-mode.  Use CSS variable names for
-                                // colors
-
-                                background: rowInfo && this.state.selected.includes(rowInfo.viewIndex) ? '#00afec' : 'white',
-                                color: rowInfo && this.state.selected.includes(rowInfo.viewIndex) ? 'white' : 'black',
-                            }
-
-                        };
-                    }}
-                    getTdProps={(state: any, rowInfo: any, column: any, instance: any) => {
-
-                        const singleClickColumns = ['tag-input', 'flagged', 'archived', 'doc-dropdown'];
-
-                        if (! singleClickColumns.includes(column.id)) {
-                            return {
-                                onDoubleClick: (e: any) => {
-                                    this.onDocumentLoadRequested(rowInfo.original.fingerprint,
-                                                                 rowInfo.original.filename,
-                                                                 rowInfo.original.hashcode);
-                                }
-                            };
-                        }
-
-                        if (singleClickColumns.includes(column.id)) {
-
-                            return {
-
-                                onClick: ((e: any, handleOriginal?: () => void) => {
-
-                                    this.handleToggleField(rowInfo.original, column.id)
-                                        .catch(err => log.error("Could not handle toggle: ", err));
-
-                                    if (handleOriginal) {
-                                        // needed for react table to function
-                                        // properly.
-                                        handleOriginal();
-                                    }
-
-                                })
-
-                            };
-
-                        }
-
-                        return {};
-
-                    }}
-
-                />
-                <br />
-                <Tips />
-                <Footer/>
-
-                </div>
-
-                {/*<CookieBanner*/}
-                    {/*message="We use cookies to track user behavior using Google Analytics and other 3rd party services. "*/}
-                    {/*buttonMessage="I Accept"*/}
-                    {/*link={<a href='https://github.com/burtonator/polar-bookshelf/blob/master/docs/Tracking-Policy.md'>
-                                More information</a>}*/}
-                    {/*styles={{*/}
-                        {/*banner: { backgroundColor: 'rgba(60, 60, 60, 0.8)', position: 'fixed', left: '0', bottom: '0' },*/}
-                        {/*message: { fontWeight: 400 }*/}
-                    {/*}}*/}
-                    {/*dismissOnClick={true}*/}
-                    {/*onAccept={() => console.log('accepted')}*/}
-                    {/*cookie="user-has-accepted-cookies"*/}
-                    {/*//*/}
-                {/*/>*/}
-
-            </div>
+            </FixedNav>
 
         );
     }
@@ -763,7 +839,7 @@ export default class DocRepoTable extends ReleasingReactComponent<IProps, IState
 
     }
 
-    private onSelectedColumns() {
+    private onSelectedColumns(columns: ListOptionType[]) {
 
         RendererAnalytics.event({category: 'user', action: 'selected-columns'});
 
@@ -772,16 +848,20 @@ export default class DocRepoTable extends ReleasingReactComponent<IProps, IState
         // would be better practice to keep them immutable.
 
         SettingsStore.load()
-            .then((settings) => {
+            .then((settingsProvider) => {
 
-                settings = {
-                    ...settings,
+                const currentSettings = settingsProvider();
+
+                const settings: Settings = {
+                    ...currentSettings,
                     documentRepository: {
                         columns: this.state.columns
                     }
                 };
 
-                SettingsStore.write(settings);
+                SettingsStore.write(settings)
+                    .catch(err => log.error(err));
+
             })
             .catch(err => log.error("Could not load settings: ", err));
 
@@ -789,16 +869,15 @@ export default class DocRepoTable extends ReleasingReactComponent<IProps, IState
     }
 
 
-    private onFilterByTitle() {
+    private onFilterByTitle(title: string) {
 
         RendererAnalytics.event({category: 'user', action: 'filter-by-title'});
-
-        this.refresh();
+        this.filteredRepoDocInfoIndex.onFilterByTitle(title);
 
     }
 
-    public refresh() {
-        this.doRefresh(this.filter(Object.values(this.props.repoDocMetaManager!.repoDocInfoIndex)));
+    private refresh() {
+        this.filteredRepoDocInfoIndex.refresh();
     }
 
     /**
@@ -818,98 +897,31 @@ export default class DocRepoTable extends ReleasingReactComponent<IProps, IState
 
     }
 
-    private filter(repoDocInfos: RepoDocInfo[]): RepoDocInfo[] {
-
-        // always filter valid to make sure nothing corrupts the state.  Some
-        // other bug might inject a problem otherwise.
-        repoDocInfos = this.doFilterValid(repoDocInfos);
-        repoDocInfos = this.doFilterByTitle(repoDocInfos);
-        repoDocInfos = this.doFilterFlaggedOnly(repoDocInfos);
-        repoDocInfos = this.doFilterHideArchived(repoDocInfos);
-        repoDocInfos = this.doFilterByTags(repoDocInfos);
-
-        return repoDocInfos;
-
-    }
-
-    private doFilterValid(repoDocs: RepoDocInfo[]): RepoDocInfo[] {
-        return repoDocs.filter(current => RepoDocInfos.isValid(current));
-    }
-
-    private doFilterByTitle(repoDocs: RepoDocInfo[]): RepoDocInfo[] {
-
-        const filterElement = document.querySelector("#filter_title") as HTMLInputElement;
-
-        const filterText = filterElement.value;
-
-        if (! Strings.empty(filterText)) {
-
-            return repoDocs.filter(current => current.title &&
-                current.title.toLowerCase().indexOf(filterText!.toLowerCase()) >= 0 );
-
-        }
-
-        return repoDocs;
-
-    }
-
-    private doFilterFlaggedOnly(repoDocs: RepoDocInfo[]): RepoDocInfo[] {
-
-        if (this.filterFlaggedOnly) {
-            return repoDocs.filter(current => current.flagged);
-        }
-
-        return repoDocs;
-
-    }
-
-    private doFilterHideArchived(repoDocs: RepoDocInfo[]): RepoDocInfo[] {
-
-        if (this.filterArchived) {
-            log.info("Applying archived filter");
-            return repoDocs.filter(current => !current.archived);
-        }
-
-        return repoDocs;
-
-    }
-
-    private doFilterByTags(repoDocs: RepoDocInfo[]): RepoDocInfo[] {
-
-        RendererAnalytics.event({category: 'user', action: 'filter-by-tags'});
-
-        const tags = Tags.toIDs(this.filteredTags.get());
-
-        return repoDocs.filter(current => {
-
-            if (tags.length === 0) {
-                // there is no filter in place...
-                return true;
-            }
-
-            if (! isPresent(current.docInfo.tags)) {
-                // the document we're searching over has not tags.
-                return false;
-            }
-
-            const intersection =
-                Sets.intersection(tags, Tags.toIDs(Object.values(current.docInfo.tags!)));
-
-            return intersection.length === tags.length;
-
-
-        });
-
-    }
-
     private onDocumentLoadRequested(fingerprint: string,
                                     filename: string,
                                     hashcode?: Hashcode) {
+
+        if (! AppRuntime.isElectron() && filename.endsWith(".phz")) {
+
+            const message = `Captured web pages (phz files) are only supported in the web preview version of Polar (please use the desktop version).`;
+            const title = "Captured web pages not supported.";
+
+            Toaster.error(message, title);
+            return;
+        }
 
         this.synchronizingDocLoader.load(fingerprint, filename, hashcode)
             .catch(err => log.error("Unable to load doc: ", err));
 
     }
+
+    private doHandleToggleField(repoDocInfo: RepoDocInfo, field: string) {
+
+        this.handleToggleField(repoDocInfo, field)
+            .catch(err => log.error(`Could not handle toggle on field: ${field}: `, err));
+
+    }
+
 
     private async handleToggleField(repoDocInfo: RepoDocInfo, field: string) {
 
@@ -941,31 +953,33 @@ export default class DocRepoTable extends ReleasingReactComponent<IProps, IState
     }
 
     private onToggleFlaggedOnly(value: boolean) {
-        this.filterFlaggedOnly = value;
-        this.refresh();
+        this.filteredRepoDocInfoIndex.onToggleFlaggedOnly(value);
     }
 
     private onToggleFilterArchived(value: boolean) {
-        this.filterArchived = value;
-        this.refresh();
+        this.filteredRepoDocInfoIndex.onToggleFilterArchived(value);
     }
 
     private cmdImportFromDisk() {
 
-        const mainAppController = remote.getGlobal('mainAppController');
+        RendererAnalytics.event({category: 'add-content', action: 'import-from-disk'});
 
-        mainAppController.cmdImport()
+        this.getController().cmdImport()
             .catch((err: Error) => log.error("Could not import from disk: ", err));
 
     }
 
     private cmdCaptureWebPage() {
 
-        const mainAppController = remote.getGlobal('mainAppController');
+        RendererAnalytics.event({category: 'add-content', action: 'capture-web-page'});
 
-        mainAppController.cmdCaptureWebPageWithBrowser()
+        this.getController().cmdCaptureWebPageWithBrowser()
             .catch((err: Error) => log.error("Could not capture page: ", err));
 
+    }
+
+    private getController(): IMainAppController {
+        return remote.getGlobal('mainAppController');
     }
 
 }
@@ -987,4 +1001,9 @@ interface IState {
     readonly selected: ReadonlyArray<number>;
 }
 
+interface IMainAppController {
 
+    cmdImport(): Promise<void>;
+
+    cmdCaptureWebPageWithBrowser(): Promise<void>;
+}

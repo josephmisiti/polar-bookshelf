@@ -1,8 +1,8 @@
-import {AbstractDatastore, Datastore, DeleteResult, DocMetaSnapshotEvent, DocMetaSnapshotEventListener, DocMetaSnapshotEvents, ErrorListener, FileMeta, FileRef, FileSynchronizationEvent, FileSynchronizationEventListener, InitResult, SnapshotResult, SyncDocMap, SyncDocMaps, SynchronizationEvent, SynchronizationEventListener, SynchronizingDatastore} from './Datastore';
+import {AbstractDatastore, BinaryFileData, Datastore, DeleteResult, DocMetaSnapshotEvent, DocMetaSnapshotEventListener, DocMetaSnapshotEvents, ErrorListener, FileMeta, FileRef, FileSynchronizationEvent, FileSynchronizationEventListener, InitResult, SnapshotResult, SyncDocMap, SyncDocMaps, SynchronizationEvent, SynchronizationEventListener, SynchronizingDatastore, DatastoreOverview, PrefsProvider} from './Datastore';
 import {Directories} from './Directories';
 import {DocMetaFileRef, DocMetaRef} from './DocMetaRef';
 import {Backend} from './Backend';
-import {DatastoreFile} from './DatastoreFile';
+import {DocFileMeta} from './DocFileMeta';
 import {Optional} from '../util/ts/Optional';
 import {DocInfo} from '../metadata/DocInfo';
 import {DatastoreMutation, DefaultDatastoreMutation} from './DatastoreMutation';
@@ -17,6 +17,7 @@ import {IEventDispatcher, SimpleReactor} from '../reactor/SimpleReactor';
 import {AsyncFunction} from '../util/AsyncWorkQueue';
 import * as firebase from '../firebase/lib/firebase';
 import {Dictionaries} from '../util/Dictionaries';
+import {LocalStoragePrefs} from '../util/prefs/Prefs';
 
 const log = Logger.create();
 
@@ -63,7 +64,10 @@ export class CloudAwareDatastore extends AbstractDatastore implements Datastore,
 
     public async init(errorListener: ErrorListener = NULL_FUNCTION): Promise<InitResult> {
 
-        await Promise.all([this.cloud.init(errorListener), this.local.init(errorListener)]);
+        await Promise.all([
+            this.cloud.init(errorListener, {noInitialSnapshot: true}),
+            this.local.init(errorListener)
+        ]);
 
         const snapshotListener = async (event: DocMetaSnapshotEvent) => this.docMetaSnapshotEventDispatcher.dispatchEvent(event);
 
@@ -99,8 +103,8 @@ export class CloudAwareDatastore extends AbstractDatastore implements Datastore,
 
     public async writeFile(backend: Backend,
                            ref: FileRef,
-                           data: Buffer | string,
-                           meta: FileMeta = {}): Promise<DatastoreFile> {
+                           data: BinaryFileData,
+                           meta: FileMeta = {}): Promise<DocFileMeta> {
 
 
         const result = this.local.writeFile(backend, ref, data, meta);
@@ -115,7 +119,7 @@ export class CloudAwareDatastore extends AbstractDatastore implements Datastore,
 
     }
 
-    public async getFile(backend: Backend, ref: FileRef): Promise<Optional<DatastoreFile>> {
+    public async getFile(backend: Backend, ref: FileRef): Promise<Optional<DocFileMeta>> {
         return this.local.getFile(backend, ref);
     }
 
@@ -170,7 +174,7 @@ export class CloudAwareDatastore extends AbstractDatastore implements Datastore,
         // this should never fail in practice.
         .catch(err => log.error("Could not handle delete: ", err));
 
-        return this.datastoreMutations.executeBatchedWrite(datastoreMutation,
+        await this.datastoreMutations.executeBatchedWrite(datastoreMutation,
                                                            async (remoteCoordinator) => {
                                                                await this.cloud.write(fingerprint, data, docInfo, remoteCoordinator);
                                                            },
@@ -180,15 +184,15 @@ export class CloudAwareDatastore extends AbstractDatastore implements Datastore,
 
     }
 
-    public async getDocMetaFiles(): Promise<DocMetaRef[]> {
-        return this.local.getDocMetaFiles();
+    public async getDocMetaRefs(): Promise<DocMetaRef[]> {
+        return this.local.getDocMetaRefs();
     }
 
     public async synchronizeDocs(...docMetaRefs: DocMetaRef[]) {
 
         log.info("CloudAwareDatastore: synchronizeDocs: ", docMetaRefs);
 
-        const toSyncOrigin = async (datastore: Datastore): Promise<SyncOrigin> => {
+        const toSyncOrigin = async (datastore: Datastore, ...docMetaRefs: DocMetaRef[]): Promise<SyncOrigin> => {
 
             const syncDocMap = await PersistenceLayers.toSyncDocMapFromDocs(datastore, docMetaRefs);
 
@@ -199,8 +203,18 @@ export class CloudAwareDatastore extends AbstractDatastore implements Datastore,
 
         };
 
-        const cloudSyncOrigin = await toSyncOrigin(this.cloud);
-        const localSyncOrigin = await toSyncOrigin(this.local);
+        const clearDocMeta = (...docMetaRefs: DocMetaRef[]): DocMetaRef[] => {
+            return docMetaRefs.map(current => {
+
+                return {
+                    fingerprint: current.fingerprint
+                };
+
+            });
+        };
+
+        const cloudSyncOrigin = await toSyncOrigin(this.cloud, ...clearDocMeta(...docMetaRefs));
+        const localSyncOrigin = await toSyncOrigin(this.local, ...docMetaRefs);
 
         // TODO: there are no events with this and the UI won't be updated.
         // the problme is that I don't think we can re-send the event data
@@ -240,7 +254,8 @@ export class CloudAwareDatastore extends AbstractDatastore implements Datastore,
 
             private async handleSnapshot(docMetaSnapshotEvent: DocMetaSnapshotEvent) {
 
-                // const snapDesc = DocMetaSnapshotEvents.format(docMetaSnapshotEvent);
+                // const snapDesc =
+                // DocMetaSnapshotEvents.format(docMetaSnapshotEvent);
 
                 try {
 
@@ -455,6 +470,14 @@ export class CloudAwareDatastore extends AbstractDatastore implements Datastore,
 
     public async deactivate() {
         await firebase.auth().signOut();
+    }
+
+    public overview(): Promise<DatastoreOverview | undefined> {
+        return this.local.overview();
+    }
+
+    public getPrefs(): PrefsProvider {
+        return this.local.getPrefs();
     }
 
 }

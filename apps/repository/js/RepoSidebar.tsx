@@ -1,11 +1,13 @@
 import * as React from 'react';
-import {Button, ListGroup} from 'reactstrap';
 import {Logger} from '../../../web/js/logger/Logger';
 import {IStyleMap} from '../../../web/js/react/IStyleMap';
-import {Blackout} from './Blackout';
+import {Blackout} from '../../../web/js/ui/blackout/Blackout';
 import {NavLogo} from './nav/NavLogo';
 import {RepoSidebarItem} from './sidebar/RepoSidebarItem';
-import {Tooltip} from '../../../web/js/ui/tooltip/Tooltip';
+import {SimpleTooltip} from '../../../web/js/ui/tooltip/SimpleTooltip';
+import {GDPRNotice} from '../../../web/js/ui/gdpr/GDPRNotice';
+import Button from 'reactstrap/lib/Button';
+import ListGroup from 'reactstrap/lib/ListGroup';
 
 const log = Logger.create();
 
@@ -17,7 +19,7 @@ const Styles: IStyleMap = {
         left: 0,
         // display: 'none',
         backgroundColor: '#fff',
-        zIndex: 999,
+        zIndex: 99999,
         height: 'calc(100%)',
         width: '200px',
         paddingLeft: '1px',
@@ -74,9 +76,11 @@ export class RepoSidebar extends React.Component<IProps, IState> {
         const sidebarStyle = Object.assign({}, Styles.sidebar, {display});
 
         const NavButtons = () => (
+
             <div style={{display: 'flex'}}>
 
                 <div id="toggle-sidebar"
+                     className="mr-1"
                      style={{marginTop: 'auto', marginBottom: 'auto'}}>
                     <Button color='light'
                             onClick={() => this.toggle()}>
@@ -84,7 +88,7 @@ export class RepoSidebar extends React.Component<IProps, IState> {
                     </Button>
                 </div>
 
-                <Tooltip target="toggle-sidebar">Toggle showing the sidebar</Tooltip>
+                <SimpleTooltip target="toggle-sidebar">Toggle showing the sidebar</SimpleTooltip>
 
                 <div style={{marginTop: 'auto', marginBottom: 'auto'}}>
                     <NavLogo/>
@@ -97,6 +101,8 @@ export class RepoSidebar extends React.Component<IProps, IState> {
 
             <div className="repo-sidebar">
 
+                <GDPRNotice/>
+
                 <div>
                     <NavButtons/>
                 </div>
@@ -106,6 +112,7 @@ export class RepoSidebar extends React.Component<IProps, IState> {
 
                 <section className="sidebar"
                          style={sidebarStyle}
+                         data-expanded={this.state.expanded}
                          onKeyUp={event => this.onKeyUp(event)}>
 
                     <div className="subheader p-1" style={Styles.subheader}>
@@ -116,37 +123,98 @@ export class RepoSidebar extends React.Component<IProps, IState> {
 
                     <ListGroup flush>
 
-                        <RepoSidebarItem href="#"
+                        <RepoSidebarItem id="sidebar-item-documents"
+                                         href="#"
                                          onClick={() => this.toggle()}
                                          iconClassName="fas fa-archive"
                                          text="Documents"/>
 
-                        <RepoSidebarItem href="#annotations"
+                        <RepoSidebarItem id="sidebar-item-annotations"
+                                         href="#annotations"
                                          onClick={() => this.toggle()}
                                          iconClassName="fas fa-layer-group"
                                          text="Annotations"/>
 
-                        <RepoSidebarItem href="#stats"
+                        {/*<RepoSidebarItem href="#editors-picks"*/}
+                                         {/*onClick={() => this.toggle()}*/}
+                                         {/*iconClassName="fas fa-star"*/}
+                                         {/*text="Editors Picks"/>*/}
+
+                        <RepoSidebarItem id="sidebar-item-stats"
+                                         href="#stats"
                                          onClick={() => this.toggle()}
                                          iconClassName="fas fa-chart-line"
-                                         text="Stats"/>
+                                         text="Statistics"/>
 
-                        <RepoSidebarItem href="#logs"
+                        <RepoSidebarItem id="sidebar-item-logs"
+                                         href="#logs"
                                          onClick={() => this.toggle()}
                                          iconClassName="fas fa-info-circle"
                                          text="Logs"/>
 
-                        <RepoSidebarItem href="#community"
+                        <RepoSidebarItem id="sidebar-item-community"
+                                         href="#community"
                                          onClick={() => this.toggle()}
                                          iconClassName="fas fa-hands-helping"
                                          text="Community"/>
 
-                        <RepoSidebarItem href="#whats-new"
+                        <RepoSidebarItem id="sidebar-item-whatsnew"
+                                         href="#whats-new"
                                          onClick={() => this.toggle()}
                                          iconClassName="fas fa-bullhorn"
                                          text="Whats New"/>
 
                     </ListGroup>
+
+                    <SimpleTooltip target="sidebar-item-documents"
+                                   show={0}
+                                   placement="right">
+
+                        Manage all documents you're reading including filtering and sorting.
+
+                    </SimpleTooltip>
+
+                    <SimpleTooltip target="sidebar-item-annotations"
+                                   show={0}
+                                   placement="right">
+
+                        Manage all annotations of all your documents in one central view.
+
+                    </SimpleTooltip>
+
+                    <SimpleTooltip target="sidebar-item-stats"
+                                   show={0}
+                                   placement="right">
+
+                        Show stats on your usage of Polar including stats on tags,
+                        rate of document addition, etc.
+
+                    </SimpleTooltip>
+
+                    <SimpleTooltip target="sidebar-item-logs"
+                                   show={0}
+                                   placement="right">
+
+                        Show logs on internal activity during background operations
+                        like cloud activity and sync.
+
+                    </SimpleTooltip>
+
+                    <SimpleTooltip target="sidebar-item-community"
+                                   show={0}
+                                   placement="right">
+
+                        Find community resources including links to discussions around Polar.
+
+                    </SimpleTooltip>
+
+                    <SimpleTooltip target="sidebar-item-whatsnew"
+                                   show={0}
+                                   placement="right">
+
+                        Find out what's new with each Polar release.
+
+                    </SimpleTooltip>
 
                 </section>
             </div>
@@ -157,7 +225,7 @@ export class RepoSidebar extends React.Component<IProps, IState> {
 
     private onKeyUp(event: React.KeyboardEvent<HTMLElement>) {
 
-        console.log("got event", event);
+        // noop
 
     }
 
@@ -170,8 +238,16 @@ export class RepoSidebar extends React.Component<IProps, IState> {
         this.setState({
             expanded
         });
+
+        // AppActivities.get().dispatchEvent({name: 'sidebar-toggled', data:
+        // {expanded}});
+
     }
 
+}
+
+export interface SidebarStatus {
+    readonly expanded: boolean;
 }
 
 interface IProps {
@@ -180,3 +256,4 @@ interface IProps {
 interface IState {
     readonly expanded: boolean;
 }
+

@@ -2,7 +2,7 @@
 import React from 'react';
 import {Button, Input, Label, Popover, PopoverBody} from 'reactstrap';
 import Popper from 'popper.js';
-import {Blackout} from '../../../../apps/repository/js/Blackout';
+import {Blackout} from '../blackout/Blackout';
 
 export class TextInputPopover extends React.Component<IProps, IState> {
 
@@ -54,7 +54,7 @@ export class TextInputPopover extends React.Component<IProps, IState> {
                            autoFocus
                            placeholder={this.props.placement || ''}/>
 
-                    <div className="text-right">
+                    <div className="text-right mt-1">
 
                         <Button color="secondary"
                                 size="sm"

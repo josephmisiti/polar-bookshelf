@@ -9,6 +9,7 @@ import {Screenshot} from './Screenshot';
 import {Thumbnail} from './Thumbnail';
 import {Pagemark} from './Pagemark';
 import {Question} from './Question';
+import {ReadingProgress} from './ReadingProgress';
 
 export class PageMeta extends SerializedObject {
 
@@ -71,6 +72,8 @@ export class PageMeta extends SerializedObject {
      */
     public readonly thumbnails: {[id: string]: Thumbnail} = {};
 
+    public readonly readingProgress: {[id: string]: ReadingProgress} = {};
+
     constructor(val: any) {
 
         super(val);
@@ -125,3 +128,4 @@ export class PageMeta extends SerializedObject {
  * A dedicated type for a page number.  From range [1,infinity)
  */
 export type PageNumber = number;
+

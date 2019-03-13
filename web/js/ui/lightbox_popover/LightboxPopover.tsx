@@ -2,7 +2,7 @@
 import React from 'react';
 import {Button, Form, FormGroup, Input, Label, Popover, PopoverBody} from 'reactstrap';
 import Popper from 'popper.js';
-import {Blackout} from '../../../../apps/repository/js/Blackout';
+import {Blackout} from '../blackout/Blackout';
 
 /**
  * Popover that functions like a normal popover but uses a lightbox to highlight
@@ -32,6 +32,7 @@ export class LightboxPopover extends React.Component<IProps, IState> {
                      isOpen={this.props.open}
                      className={this.props.className}
                      target={this.props.target}
+                     trigger="legacy"
                      style={this.props.style}>
 
                 {this.props.children}

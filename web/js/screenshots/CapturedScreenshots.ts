@@ -1,20 +1,18 @@
 import {IXYRect} from '../util/rects/IXYRect';
 import {IXYRects} from '../util/rects/IXYRects';
-import {CapturedScreenshot} from './CapturedScreenshot';
+import {CapturedScreenshot, CropDimensions, ResizeDimensions} from './CapturedScreenshot';
 import {ScreenshotRequest} from './ScreenshotRequest';
 import {ClientRects} from '../util/rects/ClientRects';
 import {Logger} from '../logger/Logger';
-import {ElectronIPCPipe} from '../ipc/handler/ElectronIPCPipe';
-import {ElectronRendererPipe} from '../ipc/pipes/ElectronRendererPipe';
-import {IPCClient} from '../ipc/handler/IPCClient';
 import {Screenshot} from '../metadata/Screenshot';
 import {Screenshots} from '../metadata/Screenshots';
 import {ImageType} from '../metadata/ImageType';
+import {IScreenshotDelegate, ScreenshotDelegate, WebContentsID} from './ScreenshotDelegate';
+import {remote} from 'electron';
+import {AppRuntime} from '../AppRuntime';
+import {Optional} from '../util/ts/Optional';
 
 const log = Logger.create();
-
-let ipcPipe = new ElectronIPCPipe(new ElectronRendererPipe());
-let ipcClient = new IPCClient(ipcPipe);
 
 /**
  * Create a screenshot of the display.
@@ -30,15 +28,49 @@ export class CapturedScreenshots {
      *
      * @param target Specify either rect or element to capture as properties.
      *
-     * @return {Promise} for {NativeImage}. You can call toDateURL on the image
+     * @return {Promise} for {NativeImage}. You can call toDataURL on the image
      *         with scaleFactor as an option.
      *
      */
-    static async capture(target: IXYRect | HTMLElement | ClientRect): Promise<CapturedScreenshot> {
+    public static async capture(target: CaptureTarget, opts: CaptureOpts = {}): Promise<Optional<CapturedScreenshot>> {
+
+        if ( ! AppRuntime.isElectron()) {
+            return Optional.empty();
+        }
+
+        const screenshotRequest = await this.doCapture(target, opts);
+
+        log.info("Sending screenshot request: ", screenshotRequest);
+
+        // const id: WebContentsID = webContents.id;
+
+        const id = this.getWebContentsID();
+
+        return Optional.of(await this.getRemoteDelegate().capture(id, screenshotRequest));
+
+    }
+
+    public static async captureToFile(target: CaptureTarget,
+                                      dest: string,
+                                      opts: CaptureOpts): Promise<void> {
+
+        // noop for now
+
+    }
+
+    private static getRemoteDelegate(): IScreenshotDelegate {
+        return remote.getGlobal(ScreenshotDelegate.DELEGATE_NAME);
+    }
+
+    private static getWebContentsID(): WebContentsID {
+        return remote.getCurrentWebContents().id;
+    }
+
+    private static async doCapture(target: CaptureTarget, opts: CaptureOpts = {}): Promise<ScreenshotRequest> {
 
         let rect: IXYRect;
 
-        if(target instanceof HTMLElement) {
+        if (target instanceof HTMLElement) {
 
             log.info("Using HTML element to build rect from bounding client rect.");
 
@@ -62,13 +94,11 @@ export class CapturedScreenshots {
             throw new Error("Unknown target type.");
         }
 
-        let screenshotRequest = <ScreenshotRequest> {
-            rect
+        const screenshotRequest = <ScreenshotRequest> {
+            rect, resize: opts.resize, crop: opts.crop
         };
 
-        log.info("Sending screenshot request: ", screenshotRequest);
-
-        return await ipcClient.call<ScreenshotRequest, CapturedScreenshot>('/screenshots/create-screenshot', screenshotRequest);
+        return screenshotRequest;
 
     }
 
@@ -82,4 +112,11 @@ export class CapturedScreenshots {
 
     }
 
+}
+
+export type CaptureTarget = IXYRect | HTMLElement | ClientRect;
+
+export interface CaptureOpts {
+    readonly resize?: ResizeDimensions;
+    readonly crop?: CropDimensions;
 }

@@ -7,7 +7,7 @@ import {DocMetaFileRef, DocMetaRef} from './DocMetaRef';
 import {DeleteResult} from './Datastore';
 import {Preconditions} from '../Preconditions';
 import {Backend} from './Backend';
-import {DatastoreFile} from './DatastoreFile';
+import {DocFileMeta} from './DocFileMeta';
 import {Optional} from '../util/ts/Optional';
 import {IDocInfo, DocInfo} from '../metadata/DocInfo';
 import {DatastoreMutation} from './DatastoreMutation';
@@ -25,6 +25,8 @@ import {PersistenceLayerListener} from './PersistenceLayerListener';
  * A PersistenceLayer that just forwards events to the given delegate.
  */
 export class DelegatedListenablePersistenceLayer extends DelegatedPersistenceLayer implements ListenablePersistenceLayer {
+
+    public readonly id = 'delegated-listenable';
 
     private readonly listenablePersistenceLayer: ListenablePersistenceLayer;
 

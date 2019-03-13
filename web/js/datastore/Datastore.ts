@@ -3,7 +3,7 @@ import {DocMetaFileRef, DocMetaFileRefs, DocMetaRef} from './DocMetaRef';
 import {DeleteResult} from './Datastore';
 import {Directories} from './Directories';
 import {Backend} from './Backend';
-import {DatastoreFile} from './DatastoreFile';
+import {DocFileMeta} from './DocFileMeta';
 import {Optional} from '../util/ts/Optional';
 import {DocInfo, IDocInfo} from '../metadata/DocInfo';
 import {FileHandle} from '../util/Files';
@@ -18,6 +18,8 @@ import {AsyncWorkQueues} from '../util/AsyncWorkQueues';
 import {DocMetas} from '../metadata/DocMetas';
 import {DatastoreMutations} from './DatastoreMutations';
 import {IEventDispatcher, SimpleReactor} from '../reactor/SimpleReactor';
+import {ISODateTimeString} from '../metadata/ISODateTimeStrings';
+import {Prefs} from '../util/prefs/Prefs';
 
 export interface Datastore extends BinaryDatastore, WritableDatastore {
 
@@ -29,7 +31,7 @@ export interface Datastore extends BinaryDatastore, WritableDatastore {
     /**
      * Init the datastore, potentially reading files of disk, the network, etc.
      */
-    init(errorListener?: ErrorListener): Promise<InitResult>;
+    init(errorListener?: ErrorListener, opts?: DatastoreInitOpts): Promise<InitResult>;
 
     stop(): Promise<void>;
 
@@ -50,8 +52,7 @@ export interface Datastore extends BinaryDatastore, WritableDatastore {
     /**
      * Return an array of {DocMetaRef}s currently in the repository.
      */
-    // TODO: refactor to getDocMetaRefs
-    getDocMetaFiles(): Promise<DocMetaRef[]>;
+    getDocMetaRefs(): Promise<DocMetaRef[]>;
 
     /**
      * Get a current snapshot of the internal state of the Datastore by
@@ -73,6 +74,18 @@ export interface Datastore extends BinaryDatastore, WritableDatastore {
      */
     deactivate(): Promise<void>;
 
+    /**
+     * Get an overview of the datastore including the time it was created as
+     * well as other stats including the number of docs.
+     */
+    overview(): Promise<DatastoreOverview | undefined>;
+
+    /**
+     * Get a Prefs object that supports reading and writing key/values to a
+     * simple prefs store.
+     */
+    getPrefs(): PrefsProvider;
+
     // TODO: we need a new method with the following semantics:
 
     // - we can add it AFTER the init()
@@ -85,6 +98,31 @@ export interface Datastore extends BinaryDatastore, WritableDatastore {
     //
     // - this is VERY similar (but somewhat different) than the firebase
     // snapshot support
+
+}
+
+export interface DatastoreInfo {
+
+    /**
+     * The time the datastore was created.
+     */
+    readonly created: ISODateTimeString;
+
+}
+
+export interface DatastoreOverview {
+
+    /**
+     * The time the datastore was created.  Right now we don't always know
+     * when the datastore was created due to adding this feature later (storing
+     * the creation time) later.
+     */
+    readonly created?: ISODateTimeString;
+
+    /**
+     * The number of documents in the datastore.
+     */
+    readonly nrDocs: number;
 
 }
 
@@ -124,8 +162,10 @@ export abstract class AbstractDatastore {
     }
 
     public async createBackup(): Promise<void> {
+
         // only supported with the disk datastore.
-        throw new Error("Not supported with this datatore");
+        // TODO (webapp) I think this needs to be enabled for Firebase?
+        // throw new Error("Not supported with this datatore");
 
     }
 
@@ -172,11 +212,11 @@ interface ReadableBinaryDatastore {
 
     containsFile(backend: Backend, ref: FileRef): Promise<boolean>;
 
-    getFile(backend: Backend, ref: FileRef): Promise<Optional<DatastoreFile>>;
+    getFile(backend: Backend, ref: FileRef): Promise<Optional<DocFileMeta>>;
 
 }
 
-interface WritableBinaryDatastore {
+export interface WritableBinaryDatastore {
 
     /**
      * Add file data to the datastore.  This is used for binary data or other
@@ -186,13 +226,17 @@ interface WritableBinaryDatastore {
     writeFile(backend: Backend,
               ref: FileRef,
               data: BinaryFileData,
-              meta?: FileMeta): Promise<DatastoreFile>;
+              meta?: FileMeta): Promise<DocFileMeta>;
 
     deleteFile(backend: Backend, ref: FileRef): Promise<void>;
 
 }
 
-export type BinaryFileData = FileHandle | Buffer | string;
+export interface WritableBinaryMetaDatastore {
+    writeFileMeta(backend: Backend, ref: FileRef, docFileMeta: DocFileMeta): Promise<void>;
+}
+
+export type BinaryFileData = FileHandle | Buffer | string | Blob;
 
 export interface FileRef {
 
@@ -207,7 +251,13 @@ export interface FileRef {
 }
 
 // noinspection TsLint
-export type FileMeta = {[key: string]: string};
+export type FileMeta = {
+    // TODO: I should also include the StorageSettings from Firebase here to
+    // give it a set of standardized fields like contentType as screenshots
+    // needs to be added with a file type.
+
+    [key: string]: string
+};
 
 /**
  *
@@ -568,3 +618,17 @@ export class SyncDocs {
 }
 
 export type DatastoreID = string;
+
+
+export interface DatastoreInitOpts {
+    readonly noInitialSnapshot?: boolean;
+}
+
+export interface PrefsProvider {
+
+    /**
+     * Get the latest copy of the prefs we're using.
+     */
+    get(): Prefs;
+
+}

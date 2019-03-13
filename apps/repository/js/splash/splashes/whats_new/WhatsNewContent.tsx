@@ -16,6 +16,496 @@ export class WhatsNewContent extends React.Component<IProps, IState> {
 
             <div>
 
+                <div>
+
+                    <h3>Polar 1.13.12</h3>
+
+                    <div className="intro">
+                        <p>
+                            This release moves us farther towards improving
+                            usability as well as having a production web version
+                            of Polar.
+                        </p>
+
+                        <p>
+                            A big new feature here is automatic-resume of your
+                            reading from the last pagemark position.
+                        </p>
+
+                    </div>
+
+                    <ul>
+                        <li>
+                            <p>new auto-resume of reading which is now enabled by default.</p>
+                        </li>
+                        <li>
+                            <p>new prefs system for disk datastore and cloud and defaults to localstorage in
+                                the browser.</p>
+                        </li>
+                        <li>
+                            <p>We no longer show background progress updates that complete very quickly.
+                                This was often distracting when the app was working in the background.</p>
+                        </li>
+                        <li>
+                            <p>Fixed bug with PDF scroll into view where we wouldn't properly scroll to the
+                                proper position. Now we just scroll to the page that was last pagemarked.</p>
+                        </li>
+                        <li>
+                            <p>We had the wrong link to the documentation.</p>
+                        </li>
+                        <li>
+                            <p>Update to Electron 3.1.6</p>
+                        </li>
+                        <li>
+                            <p>New AuthHandler system so that we can show user account information when
+                                using Firebase auth.</p>
+                        </li>
+                        <li>
+                            <p>Cut down memory usage of the webapp from 1GB to about 200MB.  The gmail app
+                                is about 120MB so this isn't far off from being 'reasonable' in terms of
+                                memory usage.</p>
+                        </li>
+                        <li>
+                            <p>Upgraded to latest versions of Firebase and Webpack</p>
+                        </li>
+                    </ul>
+                </div>
+
+                <div>
+
+                    <h3>Polar 1.13.11</h3>
+
+                    <div className="intro">
+                        <p>
+                        This is a small release from perspective of desktop
+                        users but this also adds support for the new web app
+                        which is actually live now but I'm not yet ready to
+                        give out the URL just yet.
+                        </p>
+
+                        <p>
+                            The biggest change is that you can now create
+                            highlights through pagemarks without them
+                            interfering in your workflow.  Only the corners
+                            are resizable now but other than that you can
+                            work directly with the document.
+                        </p>
+
+                    </div>
+
+                    <ul>
+                        <li>Fixed bugs with multi-select not being able to
+                        properly pick the right tags or create tags</li>
+
+                        <li>Update to Electron 3.1.5</li>
+
+                        <li>Pagemarks now allow you to work through them and
+                        still can highlight and create + delete annotations now
+                        without the pagemarks getting in the way.</li>
+
+                        <li>A number of changes needed to get the webapp version
+                        of Polar to work.</li>
+
+                    </ul>
+
+                </div>
+
+                <div>
+
+                    <h3>Polar 1.13.9</h3>
+
+                    <div className="intro">
+
+                        <p>
+                            Lots of polish in the 1.13.x series of releases.
+                            Enable support for a new user tour during onboarding
+                            and a great deal of bug fixes and usability
+                            enhancements.
+                        </p>
+
+                        <ul>
+
+                            <li>Drag and drop of whole directories works now... Including a UI showing the files being imported.  I need to include a timeout though.</li>
+                            <li>A number of changes needed for the webapp are now merged into master.</li>
+                            <li>Blackout when dragging files onto polar and drag to import now works.</li>
+                            <li>Fixed escape so the filtered tag input goes away.</li>
+                            <li>Fixed bugs with deleting items when they were not selected.</li>
+                            <li>added metrics for anki sync and the nr of successful and failed tasks.</li>
+                            <li>Track screen resolution size and platform name properly</li>
+                            <li>Only show splashes when the user is online</li>
+                            <li>Upgrade to latest reactstrap and bootstrap versions.</li>
+
+                        </ul>
+
+                        <h4>1.13.8</h4>
+
+                        <ul>
+                            <li>Should be the right amount of splashes now.</li>
+                            <li>Analytics for the add content button. Not sure if people are capturing pages or not.</li>
+                            <li>I inverted the splash time cutoff in this previous previous release and it should be fixed now.</li>
+                            <li>Auto app update implemented for MacOS and Windows.  There is a random delay of 3 days to prevent breaking clients in the wild.</li>
+                            <li>Don't rely on GA to determine the OS.  Record it ourselves.</li>
+                            <li>Enabling auto-updates in this release to keep everyone on the latest so I can iterate faster.</li>
+                        </ul>
+
+                        <h4>1.13.7</h4>
+
+                        <ul>
+                            <li>quick release to disable another GA feature which could be breaking our analytics</li>
+                            <li>Fixed Premium splash layout on smaller screens...</li>
+                        </ul>
+
+                        <h4>1.13.6</h4>
+
+                        <ul>
+                            <li>Splash messages should be delivered to users at the right times now.</li>
+                            <li>I think I fixed a bug with tracking not working due to including 'app version' in the analytics data.</li>
+                        </ul>
+
+                        <h4>1.13.5</h4>
+
+                        <ul>
+                            <li>multi-delete button for bulk deleting documents</li>
+                            <li>buttons in the doc repo are a bit bigger for better hit targets</li>
+                            <li>multi-column selection by checkbox now to make it a bit more obvious for users to select multiple documents</li>
+                            <li>Clicking flagged or archived buttons no longer select the row which was confusing.</li>
+                        </ul>
+
+                        <h4>1.13.4</h4>
+
+                        <ul>
+                            <li>Preview release DID NOT load the example docs (BAD BUG)</li>
+                            <li>Now targeting header in the tour to avoid scroll.</li>
+                        </ul>
+
+                        <h4>1.13.3</h4>
+
+                        <ul>
+                            <li>New tour feedback and the end of the tour.</li>
+                            <li>Only load example docs once.</li>
+                            <li>GA events for cloud login and configured</li>
+                            <li>User-Agent was not being properly tracked and this as very important to detect which Operating Systems were being used.</li>
+                            <li>Fixed problem with constraining the window sizes on smaller displays like smaller laptops.</li>
+                            <li>Sidebar now visible by default and the setting remembered with a local pref.</li>
+                            <li>Fixed messenger and F10 and other commands that were accidentally broken in this release.</li>
+                        </ul>
+
+                    </div>
+
+                    <h3>Polar 1.12</h3>
+
+                    <div className="intro">
+
+                        <h4>Changelog:</h4>
+
+                        <p>
+                            This release focuses mostly on improving the reading
+                            management capabilities in Polar.  We now support
+                            pagemark modes and can change the colors of the
+                            pagemark based on the mode.  Additionally, we have
+                            statistics for tracking the number of pages you read
+                            per day and an integrated calendar chart showing
+                            this visually in the stats page.
+                        </p>
+
+                    </div>
+
+                </div>
+
+
+                <div>
+
+                    <h3>Polar 1.11</h3>
+
+                    <div className="intro">
+
+                        <h4>Changelog:</h4>
+
+                        <p>
+                            Version 1.11 has fewer features than our normal weekly
+                            releases. The next release will take a bit longer and we
+                            wanted to get a version released sooner rather than
+                            later.
+                        </p>
+
+                        <ul>
+
+                            <li>Feature: More consistent header bar throughout the app.
+                            </li>
+
+                            <li>Feature: Pagemark batches which help working with
+                                PDFs that have multiple pages.  Now if you create
+                                pagemarks across pages you can delete one and the whole
+                                batch is also deleted.
+                            </li>
+
+                            <li>
+                                Feature: Page number in markdown export
+                            </li>
+
+                            <li>
+                                Feature: Disabled the top message boxes.  They were
+                                annoying and only a stop gap until we have a proper
+                                onboarding mechanism.
+                            </li>
+
+                            <li> Bug: Fixed bug with page zoom not working properly
+                                in the HTML viewer.  The zoom now works but pagemarks
+                                still aren't placed properly. </li>
+
+                            <li>
+                                Upgrade: Electron 3.1.2
+                            </li>
+
+                            <li> Donate and Discord buttons in header.  These are
+                                important. </li>
+
+                            <li>
+                                Feature: Setting POLAR_DISABLE_HARDWARE_ACCELERATION
+                                should disable hardwawre acceleration now if that's
+                                causing a problem for you.
+                            </li>
+
+                        </ul>
+
+                    </div>
+
+                </div>
+
+                <h3>Polar 1.10</h3>
+
+                <div className="intro">
+
+                    <p className="text-center">
+                    <iframe width="560" height="315"
+                            src="https://www.youtube.com/embed/Q5SU31cT4DQ"
+                            frameBorder="0"
+                            allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen></iframe>
+                    </p>
+
+                    <p>
+                        The 1.10 release again focused on a number of medium-scale
+                        features but also improves stability across the board.
+                    </p>
+
+                    <h4>Updated UI</h4>
+
+                    <p>
+                        The most obvious feature is that the UI has been
+                        significantly updated to support a new fixed header
+                        bar.
+                    </p>
+
+                    <p>
+                        One of the motivations for this was that users were
+                        getting confused when using the app for the first time
+                        and didn't know how to add content.  Now there's a
+                        large '+ Add' button front and center which is a clear
+                        call to action.
+                    </p>
+
+                    <p>
+                        Additionally, the added space allows for selecting multiple
+                        items.
+                    </p>
+
+                    <h4>Tagging Multiple Items</h4>
+
+                    <p>
+                        You can now tag multiple items in the UI by holding
+                        down shift (or control) and then clicking on the items
+                        you want to modify.
+                    </p>
+
+                    <p>
+                        Shift allows you to select a range and control allows
+                        you to select one at a time.
+                    </p>
+
+                    <p>
+                        At the top left a new 'tag' button will pop up and you
+                        can then assign tags to multiple documents at once.
+                        This is very handy for new users that want to bulk-tag
+                        multiple documents.
+                    </p>
+
+                    <p>
+                        Additionally, you can now sort by tags and if you hit the
+                        'tags' column header at the top, twice, you can see
+                        untagged documents and then tag them in bulk.
+                    </p>
+
+                    <p>
+                        This can be used when importing a large number of documents
+                        at once that all have the same tags.
+                    </p>
+
+                    <h4>New Exporter Framework</h4>
+
+                    <p>
+                        Many users requested the ability to easily export
+                        annotations from Polar and we've shipped an initial
+                        implementation of exporting content.
+                    </p>
+
+                    <p>
+                        Note that you have always had the ability to export the
+                        raw content in JSON form but this is designed to make
+                        exports more usable.
+                    </p>
+
+                    <p>
+                        In the annotation sidebar there's a new button for
+                        'Export' which allows you to write the annotations to
+                        JSON or Markdown.
+                    </p>
+
+                    <p>
+                        Right now it only supports writing to a file but we're
+                        also going to implement support for writing to the
+                        clipboard as HTML format for easily posting your
+                        annotations to your blog, Twitter, etc.
+                    </p>
+
+                    <p>
+                        The plan is to enable exporting in the 'annotation'
+                        view which would allow you to export all your annotations
+                        based any filters you define.  This would allow you
+                        to preview the annotations and then export them in bulk
+                        without having to open up a specific document.
+                    </p>
+
+                    <h4>Changelog:</h4>
+
+                    <ul>
+
+                        <li>
+                        Feature: Migrated to fixed nav header
+                        </li>
+
+                        <li>
+                       Feature: GDPR notice in place.
+                        </li>
+
+                        <li>
+                        Feature: Shift selects a range of documents, control selects one document at a
+                        time for multiple documents at once.
+                        </li>
+
+                        <li>
+                       Feature: Implemented a basic exporter framework.  Annotations can now be
+                        exported from the sidebar.  Exporting will be improved over time with more
+                        features.
+                        </li>
+
+                        <li>
+                       Bug: Fixed (I hope) long standing ugly bug of 'crash' of Electron on app exit due
+                        to windows not being destroyed via destroy().  Close does not release the
+                        resources properly.
+                        </li>
+
+                        <li>
+                       Bug: Fixed bug where long titles in URLs could generate filenames that were too
+                        long and couldn't be represented on the filesystem.  We not truncate at 50
+                        chars.
+                        </li>
+
+                        <li>
+                       Feature: New buttons for '+ Add' to import from disk or capture web page.
+                        Much easier to determine how to add content to polar.
+                        </li>
+
+                        <li>
+                       Feature: multi-select and ability to tag multiple docs at once.
+                        </li>
+
+                        <li>
+                       Feature: Sorting by tags is now much better and actually works.  If you double
+                        click the sort column it will show you untagged documents sorted by the time
+                        they were added.
+                        </li>
+
+                        <li>
+                       Dependencies: Update to electron 3.1.1
+                        </li>
+
+                        <li>
+                        Bug: Fixed bug where hitting Enter when working with a title would cause the
+                        page to reload.
+                        </li>
+
+
+                    </ul>
+
+                </div>
+
+                <h3>Polar 1.9</h3>
+
+
+                <div className="intro">
+
+                    <p>
+                        Polar 1.9.0 was just released. This release is mostly focused around stability and fixes a number of important bugs.
+                    </p>
+
+                    <p>
+                        One big new feature went into this release though - you’re now able create pagemarks across multiple pages.
+                    </p>
+
+                    <p>Here’s the excerpt from the documentation:</p>
+
+                    <p>When you right click and select “Create Pagemark to Point” Polar creates
+                        pagemarks over all previous pages up until the previous pagemark (or the
+                        beginning) of the document.</p>
+
+                    <p>This enables you to import a book which you’ve been reading and mark multiple
+                        pages as read so that you can now just use Polar to track your pgoress.</p>
+
+                    <p>For example, if you have a 300 page book, and you’ve read pages 1-200 you can
+                        just jump to page 200 and “Create Pagemark to Point” and pagemarks will be
+                        created across all previous pages.</p>
+
+                    <p>You can still pagemark the current page by selecting “Create Pagemark Box” to
+                        or run “Control Alt N” to mark just the current page.</p>
+
+                    <h4>Changelog:</h4>
+
+                    <ul>
+
+                        <li>
+                            <p>Create pagemark to point now works across multiple pages and ranges.</p>
+                        </li>
+                        <li>
+                            <p>Fixed bad bug where the UI wouldn’t update when a newly imported PDF wasn’t
+                                immediately visible in the UI. This was a bad initial user experience as they
+                                would have to reload for the PDFs to be visible.</p>
+                        </li>
+                        <li>
+                            <p>Fixed major Twitter content capture bug where we weren’t saving the CSS styles
+                                of HTML content.</p>
+                        </li>
+                        <li>
+                            <p>Fixed bug where VH rules that were less than 100 weren’t being set properly
+                                and some pages rendered ugly.</p>
+                        </li>
+                        <li>
+                            <p>Fixed bug with the ‘deck:’ tag not properly working with Anki sync.</p>
+                        </li>
+                        <li>
+                            <p>Importing large numbers of PDFs (and large PDFs) is now a lot faster and more
+                                responsive when using cloud storage.  In the past we used to wait until the
+                                cloud layer was finished but this takes a long time to complete.</p>
+                        </li>
+                        <li>
+                            <p>Now using ‘localhost’ instead of ‘localapp.getpolarized.io’ for the hostname.
+                                Some users weren’t able to resolve this (not sure why) and additionally
+                                working offline didn’t function either.</p>
+                        </li>
+                    </ul>
+
+                </div>
+
                 <h3>Polar 1.8</h3>
 
                 <div className="intro">
@@ -225,7 +715,7 @@ export class WhatsNewContent extends React.Component<IProps, IState> {
 
                 <div className="intro">
 
-                    <p className="text-center">
+                    <div className="text-center">
                         <i className="fas fa-cloud-upload-alt"
                            style={{ fontSize: '120px', margin: '20px', color: '#007bff'}}></i>
 
@@ -235,7 +725,7 @@ export class WhatsNewContent extends React.Component<IProps, IState> {
                             Polar now supports cloud sync powered by Firebase.
                         </p>
 
-                    </p>
+                    </div>
 
                     <p>
                         Cloud sync is real-time - as soon as you make a change to a
@@ -261,7 +751,7 @@ export class WhatsNewContent extends React.Component<IProps, IState> {
 
                 <div className="intro">
 
-                    <p className="text-center">
+                    <div className="text-center">
 
                         <img style={{maxHeight: '200px'}} className="img-fluid" src={EmbeddedImages.POLAR_LOGO}></img>
 
@@ -271,7 +761,7 @@ export class WhatsNewContent extends React.Component<IProps, IState> {
 
                         <h1 className="title">Polar 1.1 - Chrome Extension Support!</h1>
 
-                    </p>
+                    </div>
 
                     <p>
                         Polar 1.1 is fresh out the door and a lot of amazing features and

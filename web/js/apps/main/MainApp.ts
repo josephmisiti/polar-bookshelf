@@ -6,28 +6,26 @@ import {CacheRegistry} from '../../backend/proxyserver/CacheRegistry';
 import {Directories} from '../../datastore/Directories';
 import {CaptureController} from '../../capture/controller/CaptureController';
 import {DialogWindowService} from '../../ui/dialog_window/DialogWindowService';
-import {DefaultFileLoader} from './loaders/DefaultFileLoader';
 import {Webserver} from '../../backend/webserver/Webserver';
-import {AnalyticsFileLoader} from './loaders/AnalyticsFileLoader';
 import {MainAppController} from './MainAppController';
 import {MainAppMenu} from './MainAppMenu';
 import {Cmdline} from '../../electron/Cmdline';
 import {Logger} from '../../logger/Logger';
 import {Datastore} from '../../datastore/Datastore';
 import {ScreenshotService} from '../../screenshots/ScreenshotService';
-import {MainAppService} from './ipc/MainAppService';
+import {DocLoaderService} from './doc_loaders/electron/ipc/DocLoaderService';
 import {AppLauncher} from './AppLauncher';
 import {DocInfoBroadcasterService} from '../../datastore/advertiser/DocInfoBroadcasterService';
 import {CachingStreamInterceptorService} from '../../backend/interceptor/CachingStreamInterceptorService';
-import {GA} from "../../ga/GA";
-import {Version} from "../../util/Version";
-import {Files} from '../../util/Files';
-import {WebserverCerts} from '../../backend/webserver/WebserverCerts';
 import process from "process";
 import {AppPath} from '../../electron/app_path/AppPath';
 import {MainAPI} from './MainAPI';
 import {MainAppExceptionHandlers} from './MainAppExceptionHandlers';
 import {FileImportClient} from '../repository/FileImportClient';
+import {RendererAnalyticsService} from '../../ga/RendererAnalyticsService';
+import {AnalyticsFileLoader} from './file_loaders/AnalyticsFileLoader';
+import {DefaultFileLoader} from './file_loaders/DefaultFileLoader';
+import {FileImportRequests} from '../repository/FileImportRequests';
 
 declare var global: any;
 
@@ -78,6 +76,8 @@ export class MainApp {
         const screenshotService = new ScreenshotService();
         screenshotService.start();
 
+        new RendererAnalyticsService().start();
+
         await directories.init();
 
         log.info("Electron app path is: " + app.getAppPath());
@@ -91,8 +91,8 @@ export class MainApp {
         log.info("Stash dir: ", directories.stashDir);
         log.info("Logs dir: ", directories.logsDir);
 
-        // NOTE: removing the next three lines removes the colors in the toolbar.
-        // const appIcon = new Tray(app_icon);
+        // NOTE: removing the next three lines removes the colors in the
+        // toolbar. const appIcon = new Tray(app_icon);
         // appIcon.setToolTip('Polar Bookshelf');
         // appIcon.setContextMenu(contextMenu);
 
@@ -114,14 +114,14 @@ export class MainApp {
         const cacheInterceptorService =
             new CachingStreamInterceptorService(cacheRegistry, mainSession.protocol);
 
-        await cacheInterceptorService.start();
+        await cacheInterceptorService.start()
+            .catch(err => log.error(err));
 
         await captureController.start();
+
         await dialogWindowService.start();
 
         const userAgent = mainWindow.webContents.getUserAgent();
-
-        GA.setUserAgent(userAgent);
 
         const fileLoader = new AnalyticsFileLoader(defaultFileLoader);
 
@@ -136,21 +136,19 @@ export class MainApp {
         const mainAppAPI = new MainAPI(mainAppController, webserver);
         mainAppAPI.start();
 
-        const mainAppService = new MainAppService(mainAppController);
+        const mainAppService = new DocLoaderService(mainAppController);
         mainAppService.start();
 
-        // TODO: handle the command line here.. IE if someone opens up a file via
-        // argument.
+        // TODO: handle the command line here.. IE if someone opens up a file
+        // via argument.
 
         const mainAppMenu = new MainAppMenu(mainAppController);
         mainAppMenu.setup();
 
-        this.sendAnalytics();
-
         app.on('open-file', async (event, path) => {
 
             log.info("Open file called for: ", path);
-            FileImportClient.send({files: [path]});
+            FileImportClient.send(FileImportRequests.fromPath(path));
 
         });
 
@@ -162,7 +160,7 @@ export class MainApp {
 
             if (fileArg) {
 
-                FileImportClient.send({files: [fileArg]});
+                FileImportClient.send(FileImportRequests.fromPath(fileArg));
 
             } else {
                 mainAppController.activateMainWindow();
@@ -211,10 +209,11 @@ export class MainApp {
         app.on('activate', async function() {
 
             // On OS X it's common to re-create a window in the app when the
-            // dock icon is clicked and there are no other windows open. The way
-            // we handle this now is that if there are no windows open we re-create
-            // the document repository so they can select one. Otherwise we just
-            // re-focus the most recently used window.
+            // dock icon is clicked and there are no other windows open. The
+            // way
+            // we handle this now is that if there are no windows open we
+            // re-create the document repository so they can select one.
+            // Otherwise we just re-focus the most recently used window.
 
             const visibleWindows = BrowserWindow.getAllWindows()
                 .filter(current => current.isVisible());
@@ -229,16 +228,6 @@ export class MainApp {
         });
 
         return {mainWindow, mainAppController};
-
-    }
-
-    private sendAnalytics() {
-
-        // send off analytics so we know who's using the platform.
-
-        const appAnalytics = GA.getAppAnalytics();
-
-        appAnalytics.set('version', Version.get());
 
     }
 

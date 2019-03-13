@@ -1,5 +1,5 @@
 import {
-    AbstractDatastore,
+    AbstractDatastore, BinaryFileData,
     Datastore,
     DeleteResult,
     DocMetaSnapshotEventListener,
@@ -7,12 +7,14 @@ import {
     FileMeta,
     FileRef,
     InitResult,
-    SnapshotResult
+    SnapshotResult,
+    DatastoreOverview,
+    DatastoreInfo, DocMetaSnapshotEvent, PrefsProvider
 } from './Datastore';
 import {Preconditions} from '../Preconditions';
 import {Logger} from '../logger/Logger';
 import {DocMetaFileRef, DocMetaRef} from './DocMetaRef';
-import {FileDeleted, FileHandle, Files} from '../util/Files';
+import {FileDeleted, FileHandle, FileHandles, Files} from '../util/Files';
 import {FilePaths} from '../util/FilePaths';
 import {Directories} from './Directories';
 
@@ -20,7 +22,7 @@ import fs from 'fs';
 import os from 'os';
 
 import {Backend} from './Backend';
-import {DatastoreFile} from './DatastoreFile';
+import {DocFileMeta} from './DocFileMeta';
 import {Optional} from '../util/ts/Optional';
 import {DocInfo} from '../metadata/DocInfo';
 import {Platform, Platforms} from "../util/Platforms";
@@ -29,6 +31,12 @@ import {DatastoreMutation, DefaultDatastoreMutation} from './DatastoreMutation';
 import {Datastores} from './Datastores';
 import {NULL_FUNCTION} from '../util/Functions';
 import {Strings} from '../util/Strings';
+import {ISODateTimeStrings} from '../metadata/ISODateTimeStrings';
+import {DocMeta} from '../metadata/DocMeta';
+import {Stopwatches} from '../util/Stopwatches';
+import {Settings} from './Settings';
+import {Providers} from '../util/Providers';
+import {DictionaryPrefs, Prefs, StringToStringDict} from '../util/prefs/Prefs';
 
 const log = Logger.create();
 
@@ -48,6 +56,8 @@ export class DiskDatastore extends AbstractDatastore implements Datastore {
 
     public readonly directories: Directories;
 
+    private readonly diskPrefsStore: DiskPrefsStore;
+
     constructor() {
 
         super();
@@ -62,11 +72,74 @@ export class DiskDatastore extends AbstractDatastore implements Datastore {
         this.stashDir = this.directories.stashDir;
         this.filesDir = this.directories.filesDir;
         this.logsDir = this.directories.logsDir;
+        this.diskPrefsStore = new DiskPrefsStore(this.directories);
 
     }
 
     public async init(errorListener: ErrorListener = NULL_FUNCTION): Promise<DiskInitResult> {
-        return await this.directories.init();
+
+        const diskInitResult = await this.directories.init();
+
+        const doInitInfo = async () => {
+
+            const hasDatastoreInfo = async () => {
+
+                const datastoreInfo = await this.info();
+
+                return datastoreInfo.isPresent();
+
+            };
+
+            if (await hasDatastoreInfo()) {
+                // we're already done.
+                return;
+            }
+
+            const stopwatch = Stopwatches.create();
+
+            const docMetaRefs = await this.getDocMetaRefs();
+
+            const addedValues: string[] = [];
+
+            for (const docMetaRef of docMetaRefs) {
+
+                const data = await this.getDocMeta(docMetaRef.fingerprint);
+
+                if (data) {
+
+                    try {
+                        const docMeta: DocMeta = JSON.parse(data);
+
+                        if (docMeta && docMeta.docInfo && docMeta.docInfo.added) {
+                            addedValues.push(docMeta.docInfo.added);
+                        }
+
+                    } catch (e) {
+                        log.warn("Unable to parse doc meta with fingerprint: " + docMetaRef.fingerprint);
+                    }
+
+                }
+
+            }
+
+            const created = addedValues.length > 0 ? addedValues.sort()[0] : ISODateTimeStrings.create();
+
+            const datastoreInfo: DatastoreInfo = {created};
+
+            const msg = "Writing new datastore info: " + JSON.stringify(datastoreInfo);
+
+            log.info(msg);
+
+            await this.writeInfo(datastoreInfo);
+
+            log.info(msg + " ... " + stopwatch.stop());
+
+        };
+
+        await doInitInfo();
+        await this.diskPrefsStore.init();
+
+        return diskInitResult;
     }
 
     public async stop() {
@@ -174,7 +247,7 @@ export class DiskDatastore extends AbstractDatastore implements Datastore {
     public async writeFile(backend: Backend,
                            ref: FileRef,
                            data: FileHandle | Buffer | string,
-                           meta: FileMeta = {}): Promise<DatastoreFile> {
+                           meta: FileMeta = {}): Promise<DocFileMeta> {
 
         DatastoreFiles.assertSanitizedFileName(ref);
 
@@ -183,7 +256,7 @@ export class DiskDatastore extends AbstractDatastore implements Datastore {
         // this would create the parent dir for the file when it does not exist.
         await Files.createDirAsync(fileReference.dir);
 
-        await Files.writeFileAsync(fileReference.path, data);
+        await Files.writeFileAsync(fileReference.path, data, {existing: 'link'});
 
         await Files.writeFileAsync(fileReference.metaPath, JSON.stringify(meta, null, '  '));
 
@@ -191,7 +264,7 @@ export class DiskDatastore extends AbstractDatastore implements Datastore {
 
     }
 
-    public async getFile(backend: Backend, ref: FileRef): Promise<Optional<DatastoreFile>> {
+    public async getFile(backend: Backend, ref: FileRef): Promise<Optional<DocFileMeta>> {
 
         DatastoreFiles.assertSanitizedFileName(ref);
 
@@ -269,7 +342,7 @@ export class DiskDatastore extends AbstractDatastore implements Datastore {
 
     }
 
-    public async getDocMetaFiles(): Promise<DocMetaRef[]> {
+    public async getDocMetaRefs(): Promise<DocMetaRef[]> {
 
         if ( ! await Files.existsAsync(this.dataDir)) {
             // no data dir but this should rarely happen.
@@ -340,9 +413,75 @@ export class DiskDatastore extends AbstractDatastore implements Datastore {
         // noop now
     }
 
+    /**
+     * Get the info from the datastore.
+     */
+    public async info(): Promise<Optional<DatastoreInfo>> {
+
+        const infoPath = FilePaths.join(this.dataDir, 'info.json');
+
+        if (await Files.existsAsync(infoPath)) {
+
+            const data = await Files.readFileAsync(infoPath);
+
+            try {
+
+                const result = <DatastoreInfo> JSON.parse(data.toString('utf-8'));
+
+                return Optional.of(result);
+
+            } catch (e) {
+
+                // data is invalid so delete it so it's re-created later
+                await Files.deleteAsync(infoPath);
+
+                log.warn("Unable to read info.json file.");
+                return Optional.empty();
+
+            }
+
+        }
+
+        return Optional.empty();
+    }
+
+    public async overview(): Promise<DatastoreOverview> {
+
+        const docMetaRefs = await this.getDocMetaRefs();
+
+        const datastoreInfo = await this.info();
+
+        const created = datastoreInfo.map(info => info.created).getOrUndefined();
+
+        return {nrDocs: docMetaRefs.length, created};
+
+    }
+
+    private async writeInfo(datastoreInfo: DatastoreInfo) {
+
+        const infoPath = FilePaths.join(this.dataDir, 'info.json');
+
+        const json = JSON.stringify(datastoreInfo, null, "  ");
+
+        await Files.writeFileAsync(infoPath, json);
+
+    }
+
+    public getPrefs(): PrefsProvider {
+
+        const diskPrefsStore = this.diskPrefsStore;
+
+        return {
+            get() {
+                return diskPrefsStore.getPrefs();
+            }
+        };
+
+    }
+
     private async createDatastoreFile(backend: Backend,
                                       ref: FileRef,
-                                      fileReference: DiskFileReference): Promise<DatastoreFile> {
+                                      fileReference: DiskFileReference): Promise<DocFileMeta> {
 
         const fileURL = FilePaths.toFileURL(fileReference.path);
         const url = new URL(fileURL);
@@ -586,5 +725,84 @@ export interface InitOptions {
      * Perform a snapshot on init if
      */
     readonly initialSnapshotRequired: boolean;
+
+}
+
+export class DiskPrefsStore {
+
+    private prefs: DiskPrefs;
+
+    private readonly directories: Directories;
+
+    private readonly path: string;
+
+    constructor(directories: Directories) {
+        this.directories = directories;
+        this.prefs = new DiskPrefs(this);
+        this.path = FilePaths.create(this.directories.configDir, "prefs.json");
+    }
+
+    public async init() {
+
+        if (await Files.existsAsync(this.path)) {
+            log.info("Loaded prefs from: " + this.path);
+            const data = await Files.readFileAsync(this.path);
+            const prefs = JSON.parse(data.toString("UTF-8"));
+            this.prefs.update(prefs);
+        }
+
+    }
+
+    public getPrefs() {
+        return this.prefs;
+    }
+
+    public async commit(): Promise<void> {
+
+        const data = JSON.stringify(this.prefs.toDict(), null, "  ");
+        await Files.writeFileAsync(this.path, data);
+
+    }
+
+}
+
+/**
+ * Prefs object just backed by a local dictionary.
+ */
+export class DiskPrefs extends Prefs {
+
+    private readonly delegate: StringToStringDict = {};
+
+    private readonly diskPrefsStore: DiskPrefsStore;
+
+    constructor(diskPrefsStore: DiskPrefsStore) {
+        super();
+        this.diskPrefsStore = diskPrefsStore;
+    }
+
+    public get(key: string): Optional<string> {
+        return Optional.of(this.delegate[key]);
+    }
+
+    public set(key: string, value: string): void {
+        this.delegate[key] = value;
+
+        this.diskPrefsStore.commit()
+            .catch(err => log.error("Unable to write prefs: ", err));
+
+    }
+
+    public update(dict: StringToStringDict) {
+
+        for (const key of Object.keys(dict)) {
+            const value = dict[key];
+            this.delegate[key] = value;
+        }
+
+    }
+
+    public toDict(): StringToStringDict {
+        return {...this.delegate};
+    }
 
 }

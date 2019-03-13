@@ -38,31 +38,6 @@ export class TextHighlightController {
     constructor(model: Model) {
         this.model = Preconditions.assertNotNull(model, "model");
         this.docFormat = DocFormatFactory.getInstance();
-
-        if (ipcRenderer) {
-
-
-            // TODO: migrate this to Messenger and postMessage so that it's easily
-            // tested outside of electron.
-            ipcRenderer.on('context-menu-command', (event: Electron.EventEmitter, arg: any) => {
-
-                switch (arg.command) {
-
-                    case "delete-text-highlight":
-                        this.onTextHighlightDeleted(arg);
-                        break;
-
-                    default:
-                        console.warn("Unhandled command: " + arg.command);
-                        break;
-                }
-
-            });
-
-        } else {
-            log.warn("No ipcRenderer");
-        }
-
     }
 
     private readonly model: Model;
@@ -121,10 +96,11 @@ export class TextHighlightController {
 
     }
 
-
     private onMessageReceived(event: any) {
 
-        log.info("Received message: ", event);
+        // log.info("Received message: ", event);
+
+        const triggerEvent = event.data;
 
         switch (event.data.type) {
 
@@ -135,6 +111,14 @@ export class TextHighlightController {
                 this.doHighlight(typedMessage.value.highlightColor)
                     .catch(err => log.error("Unable to create text highlight", err));
 
+                break;
+
+            case "delete-text-highlight":
+                this.onTextHighlightDeleted(triggerEvent);
+                break;
+
+            default:
+                // log.warn("Unhandled message: " + event.data.type, event.data);
                 break;
 
         }
@@ -365,15 +349,23 @@ export class TextHighlightController {
 
         const capturedScreenshot = await selectionScreenshot.capturedScreenshotPromise;
 
-        const screenshot = this.toScreenshot(screenshotID,
-                                             capturedScreenshot.dataURL,
-                                             'screenshot',
-                                             screenshotDimensions);
+        const dataURL = capturedScreenshot
+            .map(current => current.dataURL)
+            .getOrUndefined();
 
-        // TODO: this has to be written as a binary file and then a reference to
-        // the screenshot added
+        if (dataURL) {
 
-        // pageMeta.screenshots[screenshot.id] = screenshot;
+            const screenshot = this.toScreenshot(screenshotID,
+                                                 dataURL,
+                                                 'screenshot',
+                                                 screenshotDimensions);
+
+            // TODO: this has to be written as a binary file and then a reference to
+            // the screenshot added
+
+            // pageMeta.screenshots[screenshot.id] = screenshot;
+
+        }
 
         return textHighlightRecord;
 
@@ -450,3 +442,5 @@ export class TextHighlightController {
     }
 
 }
+
+

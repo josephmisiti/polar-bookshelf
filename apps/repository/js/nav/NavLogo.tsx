@@ -24,7 +24,7 @@ const Styles: IStyleMap = {
 
 /**
  */
-export class NavLogo extends React.Component<IProps, IState> {
+export class NavLogo extends React.PureComponent<IProps, IState> {
 
     constructor(props: IProps, context: any) {
         super(props, context);
@@ -36,7 +36,7 @@ export class NavLogo extends React.Component<IProps, IState> {
             <div style={Styles.parent}>
                 <div style={Styles.child}>
                     <a href="#">
-                        <img src="./img/icon.svg" height="25"/>
+                        <img src="/apps/repository/img/icon.svg" height="25"/>
                     </a>
                 </div>
 

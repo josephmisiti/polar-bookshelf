@@ -1,12 +1,14 @@
-import {Datastore, DocMetaSnapshotEvent, FileMeta, FileRef, InitResult,
-        DocMetaSnapshotEventListener, SnapshotResult, DatastoreID,
-        AbstractDatastore} from './Datastore';
+import {
+    Datastore, DocMetaSnapshotEvent, FileMeta, FileRef, InitResult,
+    DocMetaSnapshotEventListener, SnapshotResult, DatastoreID,
+    AbstractDatastore, BinaryFileData, DatastoreOverview, PrefsProvider
+} from './Datastore';
 import {Directories} from './Directories';
 import {DocMetaFileRef, DocMetaRef} from './DocMetaRef';
 import {DeleteResult} from './Datastore';
 import {Preconditions} from '../Preconditions';
 import {Backend} from './Backend';
-import {DatastoreFile} from './DatastoreFile';
+import {DocFileMeta} from './DocFileMeta';
 import {Optional} from '../util/ts/Optional';
 import {IDocInfo} from '../metadata/DocInfo';
 import {DatastoreMutation} from './DatastoreMutation';
@@ -43,7 +45,7 @@ export class DelegatedDatastore extends AbstractDatastore implements Datastore {
         return this.delegate.delete(docMetaFileRef);
     }
 
-    public writeFile(backend: Backend, ref: FileRef, data: Buffer | string, meta: FileMeta = {}): Promise<DatastoreFile> {
+    public writeFile(backend: Backend, ref: FileRef, data: BinaryFileData, meta: FileMeta = {}): Promise<DocFileMeta> {
         return this.delegate.writeFile(backend, ref, data, meta);
     }
 
@@ -51,7 +53,7 @@ export class DelegatedDatastore extends AbstractDatastore implements Datastore {
         return this.delegate.containsFile(backend, ref);
     }
 
-    public getFile(backend: Backend, ref: FileRef): Promise<Optional<DatastoreFile>> {
+    public getFile(backend: Backend, ref: FileRef): Promise<Optional<DocFileMeta>> {
         return this.delegate.getFile(backend, ref);
     }
 
@@ -63,8 +65,8 @@ export class DelegatedDatastore extends AbstractDatastore implements Datastore {
         return this.delegate.getDocMeta(fingerprint);
     }
 
-    public getDocMetaFiles(): Promise<DocMetaRef[]> {
-        return this.delegate.getDocMetaFiles();
+    public getDocMetaRefs(): Promise<DocMetaRef[]> {
+        return this.delegate.getDocMetaRefs();
     }
 
     public async snapshot(listener: DocMetaSnapshotEventListener): Promise<SnapshotResult> {
@@ -95,4 +97,13 @@ export class DelegatedDatastore extends AbstractDatastore implements Datastore {
         this.delegate.addDocMetaSnapshotEventListener(docMetaSnapshotEventListener);
     }
 
+    public async overview(): Promise<DatastoreOverview | undefined> {
+        return await this.delegate.overview();
+    }
+
+    public getPrefs(): PrefsProvider {
+        return this.delegate.getPrefs();
+    }
+
 }
+

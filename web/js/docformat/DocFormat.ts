@@ -8,7 +8,7 @@ import {IDimensions} from '../util/Dimensions';
  */
 export abstract class DocFormat {
 
-    public abstract readonly name: string;
+    public abstract readonly name: DocFormatName;
 
     public currentScale(): number {
         return 1.0;
@@ -100,7 +100,7 @@ export abstract class DocFormat {
     /**
      * Get the current state of the doc.
      */
-    public abstract currentState(event: any): CurrentState;
+    public abstract currentState(): CurrentDocState;
 
     public supportThumbnails() {
         return false;
@@ -139,12 +139,12 @@ export interface CurrentPageElement {
     visibility: number;
 }
 
-export interface CurrentState {
+export interface CurrentDocState {
 
     readonly nrPages: number;
 
     readonly currentPageNumber: number;
 
-    readonly pageElement: HTMLElement;
-
 }
+
+export type DocFormatName = 'html' | 'pdf';

@@ -20,7 +20,6 @@ const log = Logger.create();
 const ENV_POLAR_DATASTORE = 'POLAR_DATASTORE';
 
 export class Datastores {
-
     public static create(): Datastore {
 
         const name = process.env[ENV_POLAR_DATASTORE];
@@ -39,7 +38,7 @@ export class Datastores {
                                     docMetaRefs?: DocMetaRef[]) {
 
         if (!docMetaRefs) {
-            docMetaRefs = await datastore.getDocMetaFiles();
+            docMetaRefs = await datastore.getDocMetaRefs();
         }
 
         for (const docMetaRef of docMetaRefs) {
@@ -76,7 +75,7 @@ export class Datastores {
 
         }
 
-        const docMetaFiles = await datastore.getDocMetaFiles();
+        const docMetaFiles = await datastore.getDocMetaRefs();
 
         const progressTracker = new ProgressTracker(docMetaFiles.length,
                                                     `datastore:${datastore.id}#snapshot`);
@@ -144,7 +143,7 @@ export class Datastores {
     public static async purge(datastore: Datastore,
                               purgeListener: PurgeListener = NULL_FUNCTION) {
 
-        const docMetaFiles = await datastore.getDocMetaFiles();
+        const docMetaFiles = await datastore.getDocMetaRefs();
 
         let completed: number = 0;
         const total: number = docMetaFiles.length;
@@ -213,7 +212,7 @@ export class Datastores {
         const persistenceLayer = new DefaultPersistenceLayer(datastore);
 
         const docMetaFiles =
-            (await datastore.getDocMetaFiles())
+            (await datastore.getDocMetaRefs())
                 .sort((d0, d1) => d0.fingerprint.localeCompare(d1.fingerprint));
 
         const result: DocInfo[] = [];

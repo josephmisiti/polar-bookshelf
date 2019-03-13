@@ -1,4 +1,4 @@
-import {Model} from '../model/Model';
+import {DocumentLoadedEvent, Model} from '../model/Model';
 import {View} from './View';
 import {DocFormatFactory} from '../docformat/DocFormatFactory';
 import {DocFormat} from '../docformat/DocFormat';
@@ -6,6 +6,12 @@ import {DocMetaDescriber} from '../metadata/DocMetaDescriber';
 import {forDict} from '../util/Functions';
 import {DocMeta} from '../metadata/DocMeta';
 import {Logger} from '../logger/Logger';
+import {Arrays} from '../util/Arrays';
+import {Elements} from '../util/Elements';
+import {ReadingProgressResume} from './ReadingProgressResume';
+import {LocalPrefs} from '../util/LocalPrefs';
+import {Prefs} from '../util/prefs/Prefs';
+import {PrefsProvider} from '../datastore/Datastore';
 
 const log = Logger.create();
 
@@ -13,20 +19,23 @@ export class WebView extends View {
 
     private readonly docFormat: DocFormat;
 
+    private readonly prefsProvider: PrefsProvider;
+
     /**
      *
      * @param model {Model}
      */
-    constructor(model: Model) {
+    constructor(model: Model, prefsProvider: PrefsProvider) {
         super(model);
 
+        this.prefsProvider = prefsProvider;
         this.docFormat = DocFormatFactory.getInstance();
 
     }
 
     public start() {
 
-        this.model.registerListenerForDocumentLoaded(this.onDocumentLoaded.bind(this));
+        this.model.registerListenerForDocumentLoaded(event => this.onDocumentLoaded(event));
 
         return this;
 
@@ -93,13 +102,34 @@ export class WebView extends View {
     /**
      * Setup a document once we detect that a new one has been loaded.
      */
-    private onDocumentLoaded() {
+    private onDocumentLoaded(event: DocumentLoadedEvent) {
 
-        log.info("WebView.onDocumentLoaded: ", this.model.docMeta);
+        const autoResume
+            = this.prefsProvider.get().isMarked('settings-auto-resume', true);
+
+        const docMeta = event.docMeta;
+
+        log.info("WebView.onDocumentLoaded: ", docMeta);
 
         this.updateProgress();
+        this.handleProgressDoubleClick(docMeta);
+
+        if (autoResume) {
+            ReadingProgressResume.resume(docMeta);
+        }
+
+    }
+
+    private handleProgressDoubleClick(docMeta: DocMeta) {
+
+        document.querySelector("#polar-header")!.addEventListener('dblclick', () => {
+
+            ReadingProgressResume.resume(docMeta);
+
+        });
 
     }
 
 }
+
 

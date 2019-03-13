@@ -7,11 +7,13 @@ import {Ref} from './Refs';
 
 export class Comments {
 
+    public static SEQUENCE: number = 0;
+
     public static createTextComment(text: string, ref: Ref) {
 
         const content = Texts.create(text, TextType.TEXT);
 
-        const id = Hashcodes.createRandomID();
+        const id = Hashcodes.createID(this.SEQUENCE++);
         const created = ISODateTimeStrings.create();
         const lastUpdated = created;
 
@@ -23,7 +25,7 @@ export class Comments {
 
         const content = Texts.create(text, TextType.HTML);
 
-        const id = Hashcodes.createRandomID();
+        const id = Hashcodes.createID(this.SEQUENCE++);
         const created = ISODateTimeStrings.create();
         const lastUpdated = created;
 

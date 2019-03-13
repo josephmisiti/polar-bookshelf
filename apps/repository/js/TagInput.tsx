@@ -1,9 +1,7 @@
 import * as React from 'react';
-import {Popover, PopoverBody, Button} from 'reactstrap';
 import CreatableSelect from 'react-select/lib/Creatable';
-import {Blackout} from './Blackout';
+import {Blackout} from '../../../web/js/ui/blackout/Blackout';
 import {Tag} from '../../../web/js/tags/Tag';
-import {TagsDB} from './TagsDB';
 import {Optional} from '../../../web/js/util/ts/Optional';
 import {TagSelectOption} from './TagSelectOption';
 import {TagSelectOptions} from './TagSelectOptions';
@@ -11,6 +9,9 @@ import {Tags} from '../../../web/js/tags/Tags';
 import {Logger} from '../../../web/js/logger/Logger';
 import {IStyleMap} from '../../../web/js/react/IStyleMap';
 import {RelatedTags} from '../../../web/js/tags/related/RelatedTags';
+import Button from 'reactstrap/lib/Button';
+import Popover from 'reactstrap/lib/Popover';
+import PopoverBody from 'reactstrap/lib/PopoverBody';
 
 let SEQUENCE = 0;
 
@@ -51,7 +52,7 @@ const Styles: IStyleMap = {
 };
 
 
-export class TagInput extends React.Component<IProps, IState> {
+export class TagInput extends React.PureComponent<IProps, IState> {
 
     private readonly id = "popover-" + SEQUENCE++;
 
@@ -143,14 +144,17 @@ export class TagInput extends React.Component<IProps, IState> {
                 <Popover placement="auto"
                          isOpen={this.state.open}
                          target={this.id}
+                         trigger="legacy"
                          toggle={this.toggle}
-                         className="tag-input-popover">
+                         className="tag-input-popover shadow">
                     {/*<PopoverHeader>Popover Title</PopoverHeader>*/}
 
                     {/*style={{borderWidth: '1px', backgroundColor: true ? "#b94a48" : "#aaa"}}*/}
                     <PopoverBody style={Styles.popover}>
 
-                        <strong>Enter tags:</strong>
+                        <div className="pt-1 pb-1">
+                            <strong>Assign tags to document:</strong>
+                        </div>
 
                         <CreatableSelect
                             isMulti

@@ -5,7 +5,7 @@ import {Version} from '../../util/Version';
 import {AppLauncher} from './AppLauncher';
 import {Logger} from '../../logger/Logger';
 import {Promises} from '../../util/Promises';
-import {ManualUpdates} from '../../updates/ManualUpdates';
+import {Updates} from '../../updates/Updates';
 import {Platform, Platforms} from '../../util/Platforms';
 import {AnnotationSidebarClient} from '../../annotation_sidebar/AnnotationSidebarClient';
 import {BrowserWindowRegistry} from '../../electron/framework/BrowserWindowRegistry';
@@ -13,6 +13,7 @@ import {Menus} from './Menus';
 import {isPresent} from '../../Preconditions';
 import {Directories} from '../../datastore/Directories';
 import {Messenger} from '../../electron/messenger/Messenger';
+import {AppUpdates} from '../../updates/AppUpdates';
 
 const log = Logger.create();
 
@@ -124,11 +125,6 @@ export class MainAppMenu {
 
     }
 
-    private platformSupportsUpdates() {
-        return [Platform.MACOS, Platform.WINDOWS].includes(Platforms.get());
-        // return true;
-    }
-
     private createAboutMessage() {
 
         const dataDir = Directories.getDataDir().path;
@@ -188,7 +184,7 @@ export class MainAppMenu {
                 {
                     label: 'Quit',
                     accelerator: 'CmdOrCtrl+Q',
-                    click: this.mainAppController.cmdExit.bind(this.mainAppController)
+                    click: () => this.mainAppController.cmdExit()
                 },
             ]
         };
@@ -265,7 +261,8 @@ export class MainAppMenu {
                 { role: 'undo' },
                 { role: 'redo' },
                 // { type: 'separator' },
-                // { label: 'Find', accelerator: 'CmdOrCtrl+f', click: () => InPageSearch.execute() },
+                // { label: 'Find', accelerator: 'CmdOrCtrl+f', click: () =>
+                // InPageSearch.execute() },
                 { type: 'separator' },
                 { role: 'cut'},
                 { role: 'copy' },
@@ -301,7 +298,8 @@ export class MainAppMenu {
                 { role: 'undo', enabled: false, visible: 'false'},
                 { role: 'redo' },
                 // { type: 'separator' },
-                // { label: 'Find', accelerator: 'CmdOrCtrl+f', click: () => InPageSearch.execute() },
+                // { label: 'Find', accelerator: 'CmdOrCtrl+f', click: () =>
+                // InPageSearch.execute() },
                 { type: 'separator' },
                 { role: 'cut'},
                 { role: 'copy' },
@@ -339,12 +337,10 @@ export class MainAppMenu {
                 // {
                 //     label: 'Annotations Sidebar',
                 //     type: 'checkbox',
-                //     click: (item: Electron.MenuItem, focusedWindow: BrowserWindow) => {
-                //         if (focusedWindow) {
-                //             focusedWindow.setFullScreen(!focusedWindow.isFullScreen());
-                //         }
-                //     }
-                // },
+                //     click: (item: Electron.MenuItem, focusedWindow:
+                // BrowserWindow) => { if (focusedWindow) {
+                // focusedWindow.setFullScreen(!focusedWindow.isFullScreen());
+                // } } },
 
                 {
                     id: 'toggle-annotation-sidebar',
@@ -429,11 +425,11 @@ export class MainAppMenu {
                     click: () => shell.openExternal('https://getpolarized.io/docs/') },
                 {
                     id: 'check-for-updates',
-                    label: 'Check for updates',
-                    // only show on Windows and MacOS as all other platforms have
-                    // their own dist system (for now).
-                    visible: this.platformSupportsUpdates(),
-                    click: ManualUpdates.checkForUpdates
+                    label: 'Check for Updates',
+                    // only show on Windows and MacOS as all other platforms
+                    // have their own dist system (for now).
+                    visible: AppUpdates.platformSupportsUpdates(),
+                    click: (item: Electron.MenuItem) => Updates.checkForUpdates(item),
                 },
 
                 {type: 'separator'},

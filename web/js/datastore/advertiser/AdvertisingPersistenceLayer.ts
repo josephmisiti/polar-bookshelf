@@ -19,6 +19,8 @@ export class AdvertisingPersistenceLayer
 
     private readonly docInfoAdvertisementListenerService = new DocInfoAdvertisementListenerService();
 
+    public readonly id = 'advertising';
+
     constructor(delegate: PersistenceLayer) {
         super(delegate);
     }
@@ -30,7 +32,7 @@ export class AdvertisingPersistenceLayer
 
         this.docInfoAdvertisementListenerService.start();
 
-        return this.delegate.init();
+        await this.delegate.init();
 
     }
 

@@ -1,7 +1,6 @@
 import {PersistenceLayer} from '../../../datastore/PersistenceLayer';
 import {FilePaths} from '../../../util/FilePaths';
 import {DocMetas} from '../../../metadata/DocMetas';
-import {FileLoader} from '../../main/loaders/FileLoader';
 import {Logger} from '../../../logger/Logger';
 import {PDFMetadata} from './PDFMetadata';
 import {Optional} from '../../../util/ts/Optional';
@@ -11,8 +10,11 @@ import {Backend} from '../../../datastore/Backend';
 import {Directories} from '../../../datastore/Directories';
 import {DatastoreFiles} from '../../../datastore/DatastoreFiles';
 import {DocInfo} from '../../../metadata/DocInfo';
-import {HashAlgorithm, HashEncoding} from '../../../metadata/Hashcode';
+import {HashAlgorithm, Hashcode, HashEncoding} from '../../../metadata/Hashcode';
 import {IProvider} from '../../../util/Providers';
+import {BinaryFileData, FileRef} from '../../../datastore/Datastore';
+import {URLs} from '../../../util/URLs';
+import {InputSources} from '../../../util/input/InputSources';
 
 const log = Logger.create();
 
@@ -28,33 +30,78 @@ export class PDFImporter {
         this.persistenceLayerProvider = persistenceLayerProvider;
     }
 
-    public async importFile(filePath: string): Promise<Optional<ImportedFile>> {
+    /**
+     *
+     * @param docPath
+     * @param basename The basename of the file - 'mydoc.pdf' without the full
+     *                 path information.  This is needed because blob URLs might
+     *                 not actually have the full metadata we need that the
+     *                 original input URL has given us.
+     */
+    public async importFile(docPath: string, basename: string): Promise<Optional<ImportedFile>> {
 
-        const directories = new Directories();
+        const isPath = ! URLs.isURL(docPath);
 
-        if (await PDFImporter.isWithinStashdir(directories.stashDir, filePath)) {
+        log.info(`Working with document: ${docPath}: ${isPath}`);
 
-            // prevent the user from re-importing/opening a file that is ALREADY
-            // in the stash dir.
+        if (isPath) {
 
-            log.warn("Skipping import of file that's already in the stashdir.");
-            return Optional.empty();
+            const directories = new Directories();
+
+            if (await PDFImporter.isWithinStashdir(directories.stashDir, docPath)) {
+
+                // prevent the user from re-importing/opening a file that is
+                // ALREADY in the stash dir.
+
+                log.warn("Skipping import of file that's already in the stashdir.");
+                return Optional.empty();
+            }
 
         }
 
-        const pdfMeta = await PDFMetadata.getMetadata(filePath);
+        const pdfMeta = await PDFMetadata.getMetadata(docPath);
 
         const persistenceLayer = this.persistenceLayerProvider.get();
 
         if (await persistenceLayer.contains(pdfMeta.fingerprint)) {
-            log.warn(`This file is already present in the datastore with fingerprint ${pdfMeta.fingerprint}: ${filePath}`);
+
+            log.warn(`File already present in datastore: fingerprint=${pdfMeta.fingerprint}: ${docPath}`);
+
+            const docMeta = await persistenceLayer.getDocMeta(pdfMeta.fingerprint);
+
+            if (docMeta) {
+
+                if (docMeta.docInfo.filename) {
+
+                    // return the existing doc meta information.
+
+                    const fileRef = {
+                        name: docMeta.docInfo.filename,
+                        hashcode: docMeta.docInfo.hashcode
+                    };
+
+                    const basename = FilePaths.basename(docMeta.docInfo.filename);
+                    return Optional.of({
+                        basename,
+                        docInfo: docMeta.docInfo,
+                        fileRef
+                    });
+
+                }
+
+            }
+
             return Optional.empty();
         }
 
         // create a default title from the path which is used as sometimes the
         // filename is actually a decent first attempt at a document title.
-        const basename = FilePaths.basename(filePath);
-        const defaultTitle = basename;
+
+        if (!basename && ! docPath.startsWith("blob:")) {
+            basename = FilePaths.basename(docPath);
+        }
+
+        const defaultTitle = basename || "";
 
         // TODO: this is not particularly efficient to create the hashcode
         // first, then copy the bytes to the target location.  It would be
@@ -63,18 +110,31 @@ export class PDFImporter {
         // datastore. This could be optimized but wait until people complain
         // about it as it's probably premature at this point.
 
-        const fileHashMeta = await PDFImporter.computeHashPrefix(filePath);
+        // TODO(webapp): this doesn't work either becasue it assumes that we can
+        // easily and cheaply read from the URL / blob URL but I guess that's
+        // true in this situation though it's assuming a FILE and not a blob URL
+        const fileHashMeta = await PDFImporter.computeHashPrefix(docPath);
 
-        const filename = `${fileHashMeta.hashPrefix}-` + DatastoreFiles.sanitizeFileName(basename);
-
-        const stashFilePath = FilePaths.join(directories.stashDir, filename);
+        const filename = `${fileHashMeta.hashPrefix}-` + DatastoreFiles.sanitizeFileName(basename!);
 
         // always read from a stream here as some of the PDFs we might want to
         // import could be rather large.  Also this needs to be a COPY of the
         // data, not a symlink since that's not really portable and it would
         // also be danging if the user deleted the file.  Wasting space here is
         // a good thing.  Space is cheap.
-        const inputFileRef: FileHandle = {path: filePath};
+
+        const toData = async (): Promise<BinaryFileData> => {
+
+            // TODO(webapp): make this into a toBlob function call
+            if (docPath.startsWith("blob:")) {
+                return await fetch(docPath).then(r => r.blob());
+            }
+
+            return <FileHandle> {path: docPath};
+
+        };
+
+        const data: BinaryFileData = await toData();
 
         const docMeta = DocMetas.create(pdfMeta.fingerprint, pdfMeta.nrPages, filename);
 
@@ -82,6 +142,7 @@ export class PDFImporter {
                                         .getOrElse(defaultTitle);
 
         docMeta.docInfo.description = pdfMeta.description;
+        docMeta.docInfo.doi = pdfMeta.doi;
 
         docMeta.docInfo.hashcode = {
             enc: HashEncoding.BASE58CHECK,
@@ -94,20 +155,37 @@ export class PDFImporter {
             hashcode: docMeta.docInfo.hashcode
         };
 
-        await persistenceLayer.writeFile(Backend.STASH, fileRef, inputFileRef);
+        await persistenceLayer.writeFile(Backend.STASH, fileRef, data);
 
         await persistenceLayer.write(pdfMeta.fingerprint, docMeta);
 
         return Optional.of({
-            stashFilePath,
-            docInfo: docMeta.docInfo
+            basename,
+            docInfo: docMeta.docInfo,
+            fileRef
         });
 
     }
 
-    private static async computeHashPrefix(path: string): Promise<FileHashMeta> {
+    public static async computeHashcode(docPath: string): Promise<Hashcode> {
 
-        const hashcode = await Hashcodes.createFromStream(Files.createReadStream(path));
+        const fileHashMeta = await PDFImporter.computeHashPrefix(docPath);
+
+        const hashcode: Hashcode = {
+            enc: HashEncoding.BASE58CHECK,
+            alg: HashAlgorithm.KECCAK256,
+            data: fileHashMeta.hashcode
+        };
+
+        return hashcode;
+
+    }
+
+    private static async computeHashPrefix(docPath: string): Promise<FileHashMeta> {
+
+        const inputSource = await InputSources.ofValue(docPath);
+
+        const hashcode = await Hashcodes.createFromInputSource(inputSource);
         const hashPrefix = hashcode.substring(0, 10);
 
         return { hashcode, hashPrefix };
@@ -134,9 +212,11 @@ export interface ImportedFile {
     docInfo: DocInfo;
 
     /**
-     * The full path of the file that we imported and where it is in the stash.
+     * The basename of the file imported.
      */
-    stashFilePath: string;
+    basename: string;
+
+    fileRef: FileRef;
 
 }
 

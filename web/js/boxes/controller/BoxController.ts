@@ -7,18 +7,19 @@ import {Logger} from '../../logger/Logger';
 import {Preconditions} from '../../Preconditions';
 import {RectEdges} from '../../pagemarks/controller/interact/edges/RectEdges';
 import {Optional} from '../../util/ts/Optional';
+import {DragRectAdjacencyCalculator} from '../../pagemarks/controller/interact/drag/DragRectAdjacencyCalculator';
 
 // import interact from 'interactjs';
 
-// TODO: the interactjs typescript bindings in our version are incompatible with
-// our typescript config because we disallow implicity any.  Apparently interactjs
-// fixed this BUT the fix doesn't seem to be in the 1.3.x series.
+// TODO: the interactjs typescript bindings in our version are incompatible
+// with
+// our typescript config because we disallow implicity any.  Apparently
+// interactjs fixed this BUT the fix doesn't seem to be in the 1.3.x series.
 
 // import {} from 'interactjs';
 const interact = require('interactjs');
 // import * as interact from 'interactjs';
 
-const {DragRectAdjacencyCalculator} = require("../../pagemarks/controller/interact/drag/DragRectAdjacencyCalculator");
 const {ResizeRectAdjacencyCalculator} = require("../../pagemarks/controller/interact/resize/ResizeRectAdjacencyCalculator");
 
 const log = Logger.create();
@@ -37,15 +38,15 @@ export class BoxController {
 
     /**
      */
-    register(opts: BoxOptions) {
+    public register(opts: BoxOptions) {
 
-        let boxOptions = new BoxOptions(opts);
+        const boxOptions = new BoxOptions(opts);
 
         // TODO: assert that the boxes for the selector are ALREADY absolutely
         // positioned before we accept them and they are done using style
         // attributes because we're incompatible with them otherwise.
 
-        let restrictionElement =
+        const restrictionElement =
             Optional.of(boxOptions.restrictionElement)
                     .getOrElse(boxOptions.target.parentElement!);
 
@@ -96,10 +97,10 @@ export class BoxController {
                 inertia: false,
 
             })
-            .on('dragstart',(interactionEvent: any) => {
+            .on('dragstart', (interactionEvent: any) => {
                 this._captureStartTargetRect(interactionEvent);
             })
-            .on('dragmove',(interactionEvent: any) => {
+            .on('dragmove', (interactionEvent: any) => {
 
                 // log.info("=====================")
                 // log.info("dragmove: event: ", event);
@@ -114,20 +115,26 @@ export class BoxController {
                 // log.info(`dragmove: event.clientX0: ${event.clientX0} and
                 // event.clientY0: ${event.clientY0}`);
 
-                let target = interactionEvent.target;
+                if (! interactionEvent.currentTarget.parentElement) {
+                    // we've been removed from the DOM but we're still getting
+                    // drag events so we should yield.
+                    return;
+                }
 
-                let restrictionRect = Rects.createFromBasicRect({
+                const target = interactionEvent.target;
+
+                const restrictionRect = Rects.createFromBasicRect({
                     left: 0,
                     top: 0,
                     width: restrictionElement.offsetWidth,
                     height: restrictionElement.offsetHeight
                 });
 
-                let origin = this._computeOriginXY(interactionEvent);
+                const origin = this._computeOriginXY(interactionEvent);
 
-                let targetRect = Rects.fromElementStyle(target);
+                const targetRect = Rects.fromElementStyle(target);
 
-                let intersectedBoxes = this._calculateIntersectedBoxes(interactionEvent.currentTarget, Rects.createFromBasicRect({
+                const intersectedBoxes = this._calculateIntersectedBoxes(interactionEvent.currentTarget, Rects.createFromBasicRect({
                     left: origin.x,
                     top: origin.y,
                     width: targetRect.width,
@@ -318,7 +325,7 @@ export class BoxController {
 
     /**
      */
-    _calculateIntersectedBoxes(element: HTMLElement, resizeRect: Rect, intersectedElementsSelector: string) {
+    private _calculateIntersectedBoxes(element: HTMLElement, resizeRect: Rect, intersectedElementsSelector: string) {
 
         Preconditions.assertNotNull(element, "element");
         Preconditions.assertNotNull(resizeRect, "resizeRect");

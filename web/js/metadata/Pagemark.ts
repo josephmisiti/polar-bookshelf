@@ -52,6 +52,18 @@ export class Pagemark extends Annotation {
      */
     public mode: PagemarkMode;
 
+    /**
+     * A batch is used when creating multiple pagemarks over multiple pages.
+     *
+     * We can then change settings on the entire, batch at once.  The batch
+     * is created with one unique operation across several pages.
+     *
+     */
+    public batch?: string;
+
+    // TODO: add an 'inactive' field so that the user can toggle the pagemarks
+    // active and inactive easily.
+
     constructor(val: any) {
 
         super(val);
@@ -115,5 +127,13 @@ export interface PagemarkRef {
     readonly pageNum: number;
 
     readonly pagemark: Pagemark;
+
+}
+
+export interface PagemarkIDRef {
+
+    readonly pageNum: number;
+
+    readonly id: string;
 
 }

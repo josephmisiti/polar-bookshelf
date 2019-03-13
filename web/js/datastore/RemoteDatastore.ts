@@ -1,16 +1,19 @@
-import {Datastore, DocMetaSnapshotEvent, FileMeta, FileRef, InitResult, DocMetaSnapshotEventListener, SnapshotResult, ErrorListener, DatastoreID} from './Datastore';
+import {Datastore, DocMetaSnapshotEvent, FileMeta, FileRef, InitResult, DocMetaSnapshotEventListener, SnapshotResult, ErrorListener, DatastoreID, DatastoreOverview} from './Datastore';
 import {Directories} from './Directories';
 import {DocMetaFileRef, DocMetaRef} from './DocMetaRef';
 import {DeleteResult} from './Datastore';
 import {Preconditions} from '../Preconditions';
 import {Backend} from './Backend';
-import {DatastoreFile} from './DatastoreFile';
+import {DocFileMeta} from './DocFileMeta';
 import {Optional} from '../util/ts/Optional';
 import {IDocInfo} from '../metadata/DocInfo';
 import {DatastoreMutation} from './DatastoreMutation';
 import {Datastores} from './Datastores';
 import {DelegatedDatastore} from './DelegatedDatastore';
 import {IEventDispatcher, SimpleReactor} from '../reactor/SimpleReactor';
+import {Logger} from '../logger/Logger';
+
+const log = Logger.create();
 
 /**
  * A remote datastore bug one that has a native implementation of snapshot
@@ -36,9 +39,14 @@ export class RemoteDatastore extends DelegatedDatastore {
      */
     public async init(errorListener?: ErrorListener): Promise<InitResult> {
 
+        await super.init();
+
         if (this.docMetaSnapshotEventDispatcher.size() > 0) {
+
             // perform a snapshot if a listener was attached...
-            this.snapshot(async event => this.docMetaSnapshotEventDispatcher.dispatchEvent(event));
+            this.snapshot(async event => this.docMetaSnapshotEventDispatcher.dispatchEvent(event))
+                .catch(err => log.error(err));
+
         }
 
         return {};

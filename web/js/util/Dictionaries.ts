@@ -17,6 +17,23 @@ export class Dictionaries {
 
     }
 
+    public static entries<V>(dict: {[key: string]: V} | undefined | null): ReadonlyArray<DictionaryEntry<V>> {
+
+        if (! dict) {
+            return [];
+        }
+
+        return Object.entries(dict).map(current => {
+
+            return {
+                key: current[0],
+                value: current[1]
+            };
+
+        });
+
+    }
+
     /**
      * We iterate over all keys in the dictionary
      *
@@ -42,10 +59,11 @@ export class Dictionaries {
     /**
      * Returns a dictionary with sorted keys. Dictionaries by definition aren't
      * sorted by they're implemented internally as linked hash tables.  We
-     * return the same set-theoretic dictionaries where the key set are
-     * identical, just in a different key order.
+     * return the same canonical dictionaries (according to set theory) where
+     * the key set are identical, just in a different key order.
      *
-     * This is primarily used for testing.
+     * This is primarily used for testing purposes so that two dicts are always
+     * canonically the same.
      *
      */
     public static sorted(dict: any): any {
@@ -60,13 +78,28 @@ export class Dictionaries {
             return dict;
         }
 
-        const result: any = {};
 
-        Object.keys(dict).sort().forEach(key => {
-            result[key] = this.sorted(dict[key]);
-        });
+        if (Array.isArray(dict)) {
 
-        return result;
+            const result: any[] = [];
+
+            for (let idx = 0; idx < dict.length; ++idx) {
+                result[idx] = this.sorted(dict[idx]);
+            }
+
+            return result;
+
+        } else {
+
+            const result: any = {};
+
+            Object.keys(dict).sort().forEach(key => {
+                result[key] = this.sorted(dict[key]);
+            });
+
+            return result;
+
+        }
 
     }
 
@@ -77,19 +110,19 @@ export class Dictionaries {
      *
      * @param dict
      */
-    static onlyDefinedProperties(dict: any): any {
+    public static onlyDefinedProperties(dict: any): any {
 
-        if(dict === undefined || dict === null) {
+        if (dict === undefined || dict === null) {
             // nothing to do here.
             return dict;
         }
 
-        if(! (typeof dict === 'object')) {
+        if (! (typeof dict === 'object')) {
             // if we're not a dictionary we're done
             return dict;
         }
 
-        let result: any = {};
+        const result: any = {};
 
         for (const key of Object.keys(dict).sort()) {
             const value = dict[key];
@@ -200,10 +233,26 @@ export class Dictionaries {
 
     }
 
+    /**
+     * Return true if the dictionary is empty and has no entries (null or
+     * undefined too).
+     */
+    public static empty(dict: {[key: string]: any} | null | undefined): boolean {
+
+        if (! dict) {
+            return true;
+        }
+
+        return Object.values(dict).length === 0;
+
+    }
+
 }
 
 
-interface ForDictCallbackFunction<T> {
-    (key: string, value: T): void;
-}
+type ForDictCallbackFunction<T> = (key: string, value: T) => void;
 
+export interface DictionaryEntry<V> {
+    readonly key: string;
+    readonly value: V;
+}

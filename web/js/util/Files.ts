@@ -4,6 +4,8 @@ import {Logger} from '../logger/Logger';
 import ErrnoException = NodeJS.ErrnoException;
 import {isPresent, Preconditions} from "../Preconditions";
 import {FilePaths} from "./FilePaths";
+import {Providers} from "./Providers";
+import {DurationStr, TimeDurations} from './TimeDurations';
 
 const log = Logger.create();
 
@@ -32,9 +34,65 @@ class Promised {
 export class Files {
 
     /**
+     * Go through the given directory path recursively call the callback
+     * function for each file.
+     *
+     * @param aborter If the aborder returns true we abort recursively following
+     *                directories.
+     */
+    public static async recursively(path: string,
+                                    listener: (path: string) => Promise<void>,
+                                    aborter: Aborter = new Aborter(Providers.of(false))) {
+
+
+        aborter.verify();
+
+        if (! await this.existsAsync(path)) {
+            throw new Error("Path does not exist: " + path);
+        }
+
+        // make sure we're given a directory and not a symlink, character
+        // device, etc.
+        Preconditions.assertEqual('directory',
+                                  await Files.fileType(path),
+                                  'Path had invalid type: ' + path);
+
+        aborter.verify();
+
+        const dirEntries = await this.readdirAsync(path);
+
+        for (const dirEntry of dirEntries) {
+
+            aborter.verify();
+
+            const dirEntryPath = FilePaths.join(path, dirEntry);
+            const dirEntryType = await this.fileType(dirEntryPath);
+
+            aborter.verify();
+
+            if (dirEntryType === 'directory') {
+
+                // since the aborter is passed this will throw and exception if
+                // it aborts
+                await this.recursively(dirEntryPath, listener, aborter);
+
+            } else if (dirEntryType === 'file') {
+
+                await listener(dirEntryPath);
+
+            } else {
+                throw new Error(`Unable to handle dir entry: ${dirEntryPath} of type ${dirEntryType}`);
+            }
+
+        }
+
+    }
+
+    /**
      * Create a recursive directory snapshot of files using hard links.
      *
-     * @param filter Accept any files that pass the filter predicate (return true).
+     * @param filter Accept any files that pass the filter predicate (return
+     *     true).
      *
      */
     public static async createDirectorySnapshot(path: string,
@@ -317,7 +375,7 @@ export class Files {
      */
     public static async writeFileAsync(path: string,
                                        data: FileHandle | NodeJS.ReadableStream | Buffer | string,
-                                       options?: WriteFileAsyncOptions | string | undefined | null) {
+                                       options: WriteFileAsyncOptions = {}) {
 
 
         if (data instanceof Buffer || typeof data === 'string') {
@@ -326,7 +384,34 @@ export class Files {
 
         } else if ( FileHandles.isFileHandle(data) ) {
 
+            const existing = options.existing ? options.existing : 'copy';
+
             const fileRef = <FileHandle> data;
+
+            if (existing === 'link') {
+
+                // try to create a hard link first, then revert to a regular
+                // file copy if necessary.
+
+                if (await Files.existsAsync(path)) {
+                    // in the link mode an existing files has to be removed
+                    // before it can be linked.  Normally writeFileAsync would
+                    // overwrite existing files.
+                    await Files.unlinkAsync(path);
+                }
+
+                const src = fileRef.path;
+                const dest = path;
+
+                try {
+                    await Files.linkAsync(src, dest);
+                    return;
+                } catch (e) {
+                    log.warn(`Unable to create hard link from ${src} to ${dest} (reverting to copy)`);
+                }
+
+            }
+
             Files.createReadStream(fileRef.path).pipe(fs.createWriteStream(path));
 
         } else {
@@ -451,9 +536,19 @@ export interface CreateDirResult {
 }
 
 export interface WriteFileAsyncOptions {
-    encoding?: string | null;
-    mode?: number | string;
-    flag?: string;
+
+    readonly encoding?: string | null;
+
+    readonly mode?: number | string;
+
+    readonly flag?: string;
+
+    /**
+     * Startegy for how to handle existing files.  Copy is just a copy of the
+     * original file but link creates a hard link.
+     */
+    readonly existing?: 'link' | 'copy';
+
 }
 
 export interface AppendFileOptions {
@@ -526,3 +621,67 @@ export type DirectorySnapshotPredicate = (path: string, targetPath: string) => b
 
 export const ACCEPT_ALL: DirectorySnapshotPredicate = () => true;
 
+/**
+ * Return true if we aborted due to using an aborter.
+ */
+export interface RecursionResult {
+    readonly aborted: boolean;
+}
+
+// I don't care of this class name is politically incorrect.  Let's be adults
+// here
+export type AbortionProvider = () => boolean;
+
+export class Aborter {
+
+    private aborted: boolean = false;
+
+    constructor(private provider: AbortionProvider) {
+    }
+
+    protected hasAborted(): boolean {
+        return this.provider();
+    }
+
+    /**
+     * Verify that we haven't yet aborted
+     */
+    public verify() {
+
+        if (this.hasAborted()) {
+            this.aborted = true;
+            throw new AbortionError("Operation terminated: ");
+        }
+
+    }
+
+    /**
+     * Return true if a caller actually aborted during operation in the past.
+     * Does not reflect the current state.
+     */
+    public wasMarkedAborted(): boolean {
+        return this.aborted;
+    }
+
+}
+
+
+export class Aborters {
+
+    /**
+     * Return a function that aborts after a given time.
+     */
+    public static maxTime(duration: DurationStr = "1m"): Aborter {
+
+        const durationMS = TimeDurations.toMillis(duration);
+        const started = Date.now();
+
+        return new Aborter(() => (Date.now() - started) > durationMS);
+
+    }
+
+}
+
+export class AbortionError extends Error {
+
+}

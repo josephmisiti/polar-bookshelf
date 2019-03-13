@@ -73,7 +73,10 @@ describe('DocMetas', function() {
                         "nrPages": 2,
                         "fingerprint": "0x001",
                         "added": "2012-03-02T11:38:49.321Z",
-                        "uuid": "__canonicalized__"
+                        "uuid": "__canonicalized__",
+                        "readingPerDay": {
+                            "2012-03-02": 2
+                        },
                     },
                     "pageMetas": {
                         "1": {
@@ -91,13 +94,24 @@ describe('DocMetas', function() {
                                         "width": 100,
                                         "height": 100
                                     },
-                                    "notes": {},
-                                    "mode": "READ"
+                                    "batch": "1TLPYPE5XU",
+                                    "mode": "READ",
+                                    "notes": {}
                                 }
                             },
                             "notes": {},
                             "comments": {},
                             "questions": {},
+                            "readingProgress": {
+                                "136SMQ5mZM": {
+                                    "created": "2012-03-02T11:38:49.321Z",
+                                    "id": "136SMQ5mZM",
+                                    "progress": 100,
+                                    "progressByMode": {
+                                        "READ": 100,
+                                    }
+                                }
+                            },
                             "flashcards": {},
                             "textHighlights": {},
                             "areaHighlights": {},
@@ -105,7 +119,7 @@ describe('DocMetas', function() {
                             "thumbnails": {},
                             "pageInfo": {
                                 "num": 1
-                            },
+                            }
                         },
                         "2": {
                             "pagemarks": {
@@ -122,13 +136,24 @@ describe('DocMetas', function() {
                                         "width": 100,
                                         "height": 100
                                     },
-                                    "notes": {},
-                                    "mode": "READ"
+                                    "batch": "12r4saWMd2",
+                                    "mode": "READ",
+                                    "notes": {}
                                 }
                             },
                             "notes": {},
                             "comments": {},
                             "questions": {},
+                            "readingProgress": {
+                                "145xgms7VH": {
+                                    "created": "2012-03-02T11:38:49.321Z",
+                                    "id": "145xgms7VH",
+                                    "progress": 100,
+                                    "progressByMode": {
+                                        "READ": 100,
+                                    }
+                                }
+                            },
                             "flashcards": {},
                             "textHighlights": {},
                             "areaHighlights": {},
@@ -136,8 +161,7 @@ describe('DocMetas', function() {
                             "thumbnails": {},
                             "pageInfo": {
                                 "num": 2
-                            },
-
+                            }
                         }
                     }
                 }
@@ -201,8 +225,9 @@ describe('DocMetas', function() {
                             "type": "SINGLE_COLUMN",
                             "percentage": 100,
                             "column": 0,
-                            "notes": {},
+                            "batch": "1jQboVWxtJ",
                             "mode": "READ",
+                            "notes": {},
                             "rect": {
                                 "left": 0,
                                 "top": 0,
@@ -210,7 +235,8 @@ describe('DocMetas', function() {
                                 "height": 100
                             }
                         }
-                    };
+                    }
+                ;
 
                 assertJSON(docMeta.getPageMeta(1).pagemarks, expected);
 
@@ -266,9 +292,9 @@ describe('DocMetas', function() {
                                 "width": 100,
                                 "height": 100
                             },
+                            "batch": "1ZUGnh2R1J",
+                            "mode": "READ",
                             "notes": {},
-                            "mode": "READ"
-
                         }
                     }
                 ;

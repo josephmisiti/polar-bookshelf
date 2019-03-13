@@ -9,8 +9,6 @@ export class AreaHighlightView {
     private componentManager: ComponentManager;
 
     /**
-     *
-     * @param model {Model}
      */
     constructor(model: Model) {
 
@@ -21,7 +19,7 @@ export class AreaHighlightView {
 
     }
 
-    start() {
+    public start() {
         this.componentManager.start();
     }
 

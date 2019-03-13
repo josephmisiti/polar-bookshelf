@@ -1,14 +1,13 @@
-import {DocFormat, PageDetail} from './DocFormat';
+import {DocFormat, DocFormatName, PageDetail} from './DocFormat';
 import {notNull} from '../Preconditions';
 import {Optional} from '../util/ts/Optional';
 
 export class HTMLFormat extends DocFormat {
 
-    public readonly name: string;
+    public readonly name = 'html';
 
     constructor() {
         super();
-        this.name = "html";
     }
 
     /**
@@ -55,13 +54,12 @@ export class HTMLFormat extends DocFormat {
     /**
      * Get the current state of the doc.
      */
-    currentState(event: any) {
+    public currentState() {
 
         return {
             nrPages: 1,
             currentPageNumber: 1,
-            pageElement: <HTMLElement>document.querySelector(".page")
-        }
+        };
 
     }
 

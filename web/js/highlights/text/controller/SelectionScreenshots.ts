@@ -1,6 +1,7 @@
 import {CapturedScreenshots} from '../../../screenshots/CapturedScreenshots';
 import {IFrames} from '../../../util/dom/IFrames';
 import {CapturedScreenshot} from '../../../screenshots/CapturedScreenshot';
+import {Optional} from '../../../util/ts/Optional';
 
 /**
  * Remove the selection, take a screenshot, then restore it.
@@ -21,23 +22,23 @@ export class SelectionScreenshots {
         let clientRect = this.getClientRect(range);
         clientRect = IFrames.computeTopLevelClientRect(clientRect, win);
 
-        let capturedScreenshotPromise = CapturedScreenshots.capture(clientRect);
+        const capturedScreenshotPromise = CapturedScreenshots.capture(clientRect);
 
         return {clientRect, capturedScreenshotPromise};
     }
 
-    static getClientRect(range: Range) {
+    public static getClientRect(range: Range) {
         return range.getBoundingClientRect();
     }
 
-    static withoutRange<T>(doc: Document, win: Window, handler: (range: Range) => T): T {
+    public static withoutRange<T>(doc: Document, win: Window, handler: (range: Range) => T): T {
 
-        let sel = win.getSelection();
-        let range = sel.getRangeAt(0);
+        const sel = win.getSelection();
+        const range = sel.getRangeAt(0);
 
         doc.body.classList.toggle('selection-disabled', true);
 
-        let result = handler(range);
+        const result = handler(range);
 
         doc.body.classList.toggle('selection-disabled', false);
 
@@ -54,6 +55,6 @@ export interface SelectionScreenshot {
      */
     readonly clientRect: ClientRect;
 
-    readonly capturedScreenshotPromise: Promise<CapturedScreenshot>;
+    readonly capturedScreenshotPromise: Promise<Optional<CapturedScreenshot>>;
 
 }

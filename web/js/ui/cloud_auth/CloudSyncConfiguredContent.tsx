@@ -1,56 +1,27 @@
 import * as React from 'react';
-import {IStyleMap} from '../../react/IStyleMap';
 
 
-const Styles: IStyleMap = {
+class Styles {
 
-    button: {
-        paddingTop: '4px',
-        color: 'red !important',
-        fontSize: '15px'
-
-        // minWidth: '350px',
-        // width: '350px'
-    },
-
-    icon: {
+    public static icon: React.CSSProperties = {
         fontSize: '120px',
         margin: '20px',
         // color: '007bff'
         // minWidth: '350px',
         // width: '350px'
-    },
+    };
 
-    overview: {
+    public static overview: React.CSSProperties = {
         fontSize: '18px',
         textAlign: 'justify',
         margin: '25px'
-    },
+    };
 
-    features: {
-        marginLeft: '25px'
-    },
-
-    price: {
-        textAlign: 'center',
-    },
-
-    price_value: {
-        fontSize: '40px',
-        fontWeight: 'bold',
-        lineHeight: '1em',
-    },
-
-
-    price_overview: {
-        fontSize: '14px',
-    },
-
-    content: {
+    public static content: React.CSSProperties = {
         maxWidth: '800px'
-    }
+    };
 
-};
+}
 
 export class CloudSyncConfiguredContent extends React.Component<IProps, IState> {
 
@@ -78,12 +49,12 @@ export class CloudSyncConfiguredContent extends React.Component<IProps, IState> 
                     copied to the cloud in the background in realtime.
                 </h2>
 
-                <p className="intro">
+                <p className="intro" style={Styles.overview}>
                     Any new documents you add (or annotate) will also be updated
                     and synchronized in the background.
                 </p>
 
-                <p className="intro">
+                <p className="intro" style={Styles.overview}>
                     Please remember that Polar Sync is <b>not</b> a replacement
                     for a good backup strategy!  If you delete your files in
                     Polar Sync they're gone forever - just as though you deleted

@@ -1,5 +1,4 @@
 import * as React from 'react';
-import {Dropdown, DropdownItem, DropdownMenu, DropdownToggle, Tooltip} from 'reactstrap';
 import {ConfirmPopover} from '../../../web/js/ui/confirm/ConfirmPopover';
 import {TextInputPopover} from '../../../web/js/ui/text_input/TextInputPopover';
 import {RepoDocInfo} from './RepoDocInfo';
@@ -9,6 +8,12 @@ import {clipboard, shell} from 'electron';
 import {Directories} from '../../../web/js/datastore/Directories';
 import {FilePaths} from '../../../web/js/util/FilePaths';
 import {Toaster} from '../../../web/js/ui/toaster/Toaster';
+import {Clipboards} from '../../../web/js/util/system/clipboard/Clipboards';
+import DropdownItem from 'reactstrap/lib/DropdownItem';
+import DropdownToggle from 'reactstrap/lib/DropdownToggle';
+import Dropdown from 'reactstrap/lib/Dropdown';
+import DropdownMenu from 'reactstrap/lib/DropdownMenu';
+import {AppRuntime} from '../../../web/js/AppRuntime';
 
 const log = Logger.create();
 
@@ -46,7 +51,7 @@ export class DocDropdown extends React.Component<IProps, IState> {
 
         return (
 
-            <div className="text-right">
+            <div className="doc-dropdown-parent">
 
                 {/*TODO: I experimented with bringing up a tooltip after the user*/}
                 {/*selects an item but there's no way to auto-hide after it was */}
@@ -67,7 +72,9 @@ export class DocDropdown extends React.Component<IProps, IState> {
                     <DropdownToggle color="link"
                                     className="doc-dropdown-button btn text-muted pl-1 pr-1"
                                     id={this.props.id + '-dropdown-toggle'}>
+
                         <i className="fas fa-ellipsis-h"></i>
+
                     </DropdownToggle>
 
                     <DropdownMenu style={Styles.DropdownMenu}>
@@ -82,13 +89,20 @@ export class DocDropdown extends React.Component<IProps, IState> {
                         </DropdownItem>
 
                         <DropdownItem disabled={! this.props.repoDocInfo.filename}
+                                      hidden={AppRuntime.isBrowser()}
                                       onClick={() => this.onShowFile(this.props.repoDocInfo.filename!)}>
                             Show File
                         </DropdownItem>
 
                         <DropdownItem disabled={! this.props.repoDocInfo.filename}
+                                      hidden={AppRuntime.isBrowser()}
                                       onClick={() => this.onCopyFilePath(this.props.repoDocInfo.filename!)}>
                             Copy File Path
+                        </DropdownItem>
+
+                        <DropdownItem disabled={! this.props.repoDocInfo.filename}
+                                      onClick={() => this.onCopyText(this.props.repoDocInfo.fingerprint, "Document ID copied to clipboard")}>
+                            Copy Document ID
                         </DropdownItem>
 
                         {/*TODO: maybe load original URL too?*/}
@@ -140,19 +154,19 @@ export class DocDropdown extends React.Component<IProps, IState> {
 
     }
 
+    private onCopyText(text: string, message: string) {
+        this.copyText(text);
+        Toaster.success(message);
+    }
+
     private onCopyURL(url: string) {
         this.copyText(url);
         Toaster.success("URL copied to clipboard!");
-
     }
 
     private copyText(text: string) {
 
-        if (clipboard) {
-            clipboard.writeText(text);
-        } else {
-            log.warn("No clipboard with which to copy text: ", text);
-        }
+        Clipboards.getInstance().writeText(text);
 
     }
 

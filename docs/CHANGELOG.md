@@ -1,29 +1,298 @@
+
+# 1.13.13
+
+- Webapp users now properly get a default set of documents.
+
+- Tour now works on webapp
+
+- Number of fixes for the webapp including progress uploads (which also work for
+desktop sync too) and multiple file uploads.  
+
+- Cancel button for when the user tries to login but wants to back out.
+
+- Cloze deletion flashcards now have cloze counter incremented.
+
+- Firebase can now send progress notifications to the desktop during file 
+  uploads to the cloud.
+
+- Fixed bug with link not being hidden on desktop electron.
+
+- New button on the top right so that users can find app updates easier.
+
+# 1.13.12
+
+- new auto-resume of reading which is now enabled by default.
+
+- new prefs system for disk datastore and cloud and defaults to localstorage in
+  the browser.
+
+- We no longer show background progress updates that complete very quickly. 
+  This was often distracting when the app was working in the background. 
+
+- Fixed bug with PDF scroll into view where we wouldn't properly scroll to the 
+  proper position. Now we just scroll to the page that was last pagemarked.
+
+- We had the wrong link to the documentation.
+
+- Update to Electron 3.1.6
+
+- New AuthHandler system so that we can show user account information when 
+  using Firebase auth.
+
+- Cut down memory usage of the webapp from 1GB to about 200MB.  The gmail app
+  is about 120MB so this isn't far off from being 'reasonable' in terms of 
+  memory usage.
+
+- Upgraded to latest versions of Firebase and Webpack
+
+# 1.13.11
+
+- Fixed bugs with multi-select not being able to properly pick the right 
+
+- Tour now only works on Electron.  
+
+- Update to Electron 3.1.5 
+
+- Pagemarks now allow you to work through them and still can highlight and 
+  create + delete annotations now without the pagemarks getting in the way.
+
+- A number of changes needed to get the webapp version of Polar to work.
+
+- FilePaths.basename works in the browser context now. 
+
+# 1.13.10
+
+- Fixed bad bug that broke capture (sorry)
+
+- More components are PureComponent now for faster performance.
+
+- New buttons at the top for cleaner nav.
+
+# 1.13.9
+
+- improved document links
+
+- Fixed bug where the viewer tour kept coming up.
+
+- Fixed nasty bug where the comment and flashcard text was hidden behind the 
+  toolbar.
+
+- Drag and drop of whole directories works now... Including a UI showing the 
+  files being imported.  I need to include a timeout though.  
+
+- A number of changes needed for the webapp are now merged into master.  
+
+- Blackout when dragging files onto polar and drag to import now works.
+
+- Fixed escape so the filtered tag input goes away.
+
+- Fixed bugs with deleting items when they were not selected.
+
+- added metrics for anki sync and the nr of successful and failed tasks.
+
+- Track screen resolution size and platform name properly  
+
+- Only show splashes when the user is online
+
+- Upgrade to latest reactstrap and bootstrap versions.
+
+# 1.13.8
+
+- Should be the right amount of splashes now. 
+
+- Analytics for the add content button. Not sure if people are capturing pages
+  or not.
+
+- I inverted the splash time cutoff in this previous previous release and it
+  should be fixed now.   
+
+- Auto app update implemented for MacOS and Windows.  There is a random delay of 
+  3 days to prevent breaking clients in the wild.
+
+- Don't rely on GA to determine the OS.  Record it ourselves.
+
+- Enabling auto-updates in this release to keep everyone on the latest so I can
+  iterate faster.
+
+# 1.13.7
+
+- quick release to disable another GA feature which could be greaking our 
+  analytics
+  
+- Fixed Premium splash layout on smaller screens...
+
+# 1.13.6
+
+- Splash messages should be delivered to users at the right times now.
+
+- I think I fixed a bug with tracking not working due to including 'app version'
+  in the analytics data.
+
+# 1.13.5
+
+- multi-delete button for bulk deleting documents
+
+- buttons in the doc repo are a bit bigger for better hit targets
+
+- multi-column selection by checkbox now to make it a bit more obvious for 
+  users to select multiple documents
+
+- Clicking flagged or archived buttons no longer select the row which was 
+  confusing.
+
+# 1.13.4
+
+- Preview release DID NOT load the example docs (BAD BUG)
+
+- Now targeting header in the tour to avoid scroll.
+
+# 1.13.3
+
+- New tour feedback and the end of the tour.
+
+- Only load example docs once.
+
+- GA events for cloud login and configured 
+
+- User-Agent was not being properly tracked and this as very important to detect
+  which Operating Systems were being used.
+
+- Fixed problem with constraining the window sizes on smaller displays like                                                                                        rep
+  smaller laptops.
+
+- Sidebar now visible by default and the setting remembered with a local pref.
+
+- Fixed messenger and F10 and other commands that were accidentally broken in 
+  this release. 
+
+# 1.13.2
+
+- more tour changes
+
+# 1.13.0
+
+- Tour of how to use Polar for new users.
+
+- Replaced the context menu with a native React menu. 
+
+# 1.12.1
+
+- If we are given a path to a file during the writeFile datastore operation, we
+  hard link it instead of copying it.  This is only done with file paths 
+  (not data blobs) and works during PDF file import to avoid duplicate disk 
+  space usage.   
+
+- re-importing an existing file should now open it in polar instead of doing 
+  nothing. 
+
+- starting work to disabled updates for MS and Apple stores.  
+
+- adding some newlines between markdown exported entries.
+
+- Updated windows build with new icons. 
+
+# 1.12.0
+
+- Feature: Properly keep track of reading progress and update the reading
+  progress metrics now.
+
+- Feature: Ability to set the 'mode' for pagemarks now so that we can keep track
+  of reading progress better.  We support various pagemark modes like read, 
+  previously-read, table of contents, etc. 
+
+- Feature: site (example.com) is now a column which you can add to the doc repo
+  but isn't enabled by default.  This is used for captured content.  We may
+  add this for other types of content in the future including PDFs if we can 
+  get proper URLs for the content in the future.
+
+- Feature: Double click on the pagemark progress bar now jumps to the last pagemark. This
+  has been frequently requested but more specifically to have it automatically
+  jump to the last position.  I'm not able to implement the automatic portion
+  right away so this is a temporary work around.  My plan is to eventually put
+  a button and a right click context menu when I rework some of the viewer 
+  support to React.
+
+- Feature: Now parse DOIs from PDFs and store them in the model.  This feature
+  isn't really used yet but we plan to add support for fetching additional 
+  metadata based on the DOI
+
+- Feature: More descriptive text for the assignment and filtering of documents
+  around tags to avoid confusing the user around creating vs filtering of tags. 
+  Might still have to improve the UX here.
+
+- Bug: Rework the way we do app exit which hopefully fixes windows bugs and
+  exception on exit.
+
+- Verified Electron 4.0.3 mostly works with Polar but only using 3.1.3 due to 
+  a bug with resizing / pagemarks. 
+
+- Bug: Logging out of cloud sync makes it impossible to login back again. #536
+
+# 1.11.0
+
+- more consistent header bar throughout the app.
+
+- Pagemark batches which help working with PDFs that have multiple pages.  Now
+  if you create pagemarks across pages you can delete one and the whole batch 
+  is also deleted.
+
+- Reworked analytics.  I'm expecting a 2x falloff on this release I think. 
+
+- Fixed bug with page zoom not working properly in the HTML viewer.  The zoom 
+  now works but pagemarks still aren't placed properly.
+
+- Page number in markdown export
+
+- Disabled the top message boxes.  They were annoying and only a stop gap until
+  we have a proper onboarding mechanism.  I
+
+- Electron 3.1.2
+
+- Donate and Discord buttons in header.  These are important.
+
+- Setting POLAR_DISABLE_HARDWARE_ACCELERATION should disable hardwawre 
+  acceleration now if that's causing a problem for you.
+
 # 1.10.0
 
-- Fixed (I hope) long standing ugly bug of 'crash' of Electron on app exit due
+- Fixed sync bug related to not sending data to the cloud but I don't think this
+  was actually released.
+
+- Fixed bug with promises not being resolved and the viewer not being updated
+  but I don't think this was actually released.
+
+- Feature: Migrated to fixed nav header
+
+- Feature: GDPR notice in place.
+
+- Feature: Shift selects a range of documents, control selects one document at a
+  time for multiple documents at once.
+
+- Feature: Implemented a basic exporter framework.  Annotations can now be
+  exported from the sidebar.  Exporting will be improved over time with more
+  features.
+
+- Bug: Fixed (I hope) long standing ugly bug of 'crash' of Electron on app exit due
   to windows not being destroyed via destroy().  Close does not release the 
   resources properly.  
 
-- Fixed bug where long titles in URLs could generate filenames that were too
+- Bug: Fixed bug where long titles in URLs could generate filenames that were too
   long and couldn't be represented on the filesystem.  We not truncate at 50 
   chars.
 
-- shift selects a range of documents, control selects one document at a time 
-  for multiple documents at once.
+- Feature: New buttons for '+ Add' to import from disk or capture web page. 
+  Much easier to determine how to add content to polar.
 
-- New buttons for '+ Add' to import from disk or capture web page.  Much easier
-  to determine how to add content to polar.
+- Feature: multi-select and ability to tag multiple docs at once.
 
-- multi-select and ability to tag multiple docs at once.
+- Feature: Sorting by tags is now much better and actually works.  If you double
+  click the sort column it will show you untagged documents sorted by the time
+  they were added.
 
-- Sorting by tags is now much better and actually works.  If you double click
-  the sort column it will show you untagged documents sorted by the time they 
-  were added. 
+- Dependencies: Update to electron 3.1.1 
 
-- Update to electron 3.1.1 
-
-- Fixed bug where hitting Enter when working with a title would cause the page
-  to reload.
+- Bug: Fixed bug where hitting Enter when working with a title would cause the
+  page to reload.
 
 # 1.9.0
 

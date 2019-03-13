@@ -8,6 +8,8 @@ import {IProvider} from "../util/Providers";
 import {ListenablePersistenceLayer} from './ListenablePersistenceLayer';
 import {Logger} from "../logger/Logger";
 import {RendererAnalytics} from '../ga/RendererAnalytics';
+import {FirebasePersistenceLayerFactory} from './factories/FirebasePersistenceLayerFactory';
+import {AppRuntime} from '../AppRuntime';
 
 const log = Logger.create();
 
@@ -122,6 +124,11 @@ export class PersistenceLayerManager implements IProvider<ListenablePersistenceL
     }
 
     private createPersistenceLayer(type: PersistenceLayerType): ListenablePersistenceLayer {
+
+        if (AppRuntime.isBrowser()) {
+            // we are ALWAYs using firebase when in the browser.
+            return FirebasePersistenceLayerFactory.create();
+        }
 
         if (type === 'local') {
             return RemotePersistenceLayerFactory.create();

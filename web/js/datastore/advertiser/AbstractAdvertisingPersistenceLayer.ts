@@ -2,16 +2,18 @@ import {ListenablePersistenceLayer} from '../ListenablePersistenceLayer';
 import {SimpleReactor} from '../../reactor/SimpleReactor';
 import {PersistenceLayerEvent} from '../PersistenceLayerEvent';
 import {PersistenceLayerListener} from '../PersistenceLayerListener';
-import {PersistenceLayer} from '../PersistenceLayer';
+import {PersistenceLayer, PersistenceLayerID} from '../PersistenceLayer';
 import {DocMeta} from '../../metadata/DocMeta';
 import {DocMetaFileRef, DocMetaRef} from '../DocMetaRef';
-import {DeleteResult, DocMetaSnapshotEvent, FileRef,
-        DocMetaSnapshotEventListener, SnapshotResult,
-        ErrorListener,
-    Datastore} from '../Datastore';
+import {
+    DeleteResult, DocMetaSnapshotEvent, FileRef,
+    DocMetaSnapshotEventListener, SnapshotResult,
+    ErrorListener,
+    Datastore, BinaryFileData
+} from '../Datastore';
 import {PersistenceEventType} from '../PersistenceEventType';
 import {Backend} from '../Backend';
-import {DatastoreFile} from '../DatastoreFile';
+import {DocFileMeta} from '../DocFileMeta';
 import {FileMeta} from '../Datastore';
 import {Optional} from '../../util/ts/Optional';
 import {DocInfo} from '../../metadata/DocInfo';
@@ -23,6 +25,8 @@ import {Releaseable} from '../../reactor/EventListener';
 const log = Logger.create();
 
 export abstract class AbstractAdvertisingPersistenceLayer implements ListenablePersistenceLayer {
+
+    public abstract readonly id: PersistenceLayerID;
 
     public readonly datastore: Datastore;
 
@@ -64,7 +68,7 @@ export abstract class AbstractAdvertisingPersistenceLayer implements ListenableP
 
     public async writeDocMeta(docMeta: DocMeta, datastoreMutation?: DatastoreMutation<DocInfo>): Promise<DocInfo> {
 
-        return this.handleWrite(docMeta, async () => await this.delegate.writeDocMeta(docMeta, datastoreMutation));
+        return await this.handleWrite(docMeta, async () => await this.delegate.writeDocMeta(docMeta, datastoreMutation));
 
     }
 
@@ -72,7 +76,7 @@ export abstract class AbstractAdvertisingPersistenceLayer implements ListenableP
                        docMeta: DocMeta,
                        datastoreMutation: DatastoreMutation<DocInfo> = new DefaultDatastoreMutation()): Promise<DocInfo> {
 
-        return this.handleWrite(docMeta, async () => await this.delegate.write(fingerprint, docMeta, datastoreMutation));
+        return await this.handleWrite(docMeta, async () => await this.delegate.write(fingerprint, docMeta, datastoreMutation));
 
     }
 
@@ -103,8 +107,8 @@ export abstract class AbstractAdvertisingPersistenceLayer implements ListenableP
         return this.delegate.contains(fingerprint);
     }
 
-    public getDocMetaFiles(): Promise<DocMetaRef[]> {
-        return this.delegate.getDocMetaFiles();
+    public getDocMetaRefs(): Promise<DocMetaRef[]> {
+        return this.delegate.getDocMetaRefs();
     }
 
     public snapshot(listener: DocMetaSnapshotEventListener,
@@ -145,7 +149,7 @@ export abstract class AbstractAdvertisingPersistenceLayer implements ListenableP
         this.reactor.dispatchEvent(event);
     }
 
-    public writeFile(backend: Backend, ref: FileRef, data: Buffer | string, meta: FileMeta): Promise<DatastoreFile> {
+    public writeFile(backend: Backend, ref: FileRef, data: BinaryFileData, meta: FileMeta): Promise<DocFileMeta> {
         return this.delegate.writeFile(backend, ref, data, meta);
     }
 
@@ -153,7 +157,7 @@ export abstract class AbstractAdvertisingPersistenceLayer implements ListenableP
         return this.delegate.containsFile(backend, ref);
     }
 
-    public getFile(backend: Backend, ref: FileRef): Promise<Optional<DatastoreFile>> {
+    public getFile(backend: Backend, ref: FileRef): Promise<Optional<DocFileMeta>> {
         return this.delegate.getFile(backend, ref);
     }
 

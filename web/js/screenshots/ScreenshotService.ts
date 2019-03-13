@@ -1,6 +1,6 @@
-import {Logger} from '../logger/Logger';
-import {IPCEngines} from '../ipc/handler/IPCEngines';
-import {ScreenshotHandler} from './ScreenshotHandler';
+import {ScreenshotDelegate} from './ScreenshotDelegate';
+
+declare var global: any;
 
 /**
  * Service that runs in the Electron main context which listens to IPC events
@@ -13,16 +13,15 @@ import {ScreenshotHandler} from './ScreenshotHandler';
  */
 export class ScreenshotService {
 
-    constructor() {
-    }
+    public start() {
 
-    start() {
+        const screenshotDelegate = new ScreenshotDelegate();
 
-        let ipcEngine = IPCEngines.mainProcess();
+        if (global[ScreenshotDelegate.DELEGATE_NAME]) {
+            throw new Error("Object named screenshotDelegate already in global");
+        }
 
-        ipcEngine.registry.registerPath('/screenshots/create-screenshot', new ScreenshotHandler());
-
-        ipcEngine.start();
+        global[ScreenshotDelegate.DELEGATE_NAME] = screenshotDelegate;
 
     }
 

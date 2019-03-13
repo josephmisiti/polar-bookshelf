@@ -5,7 +5,7 @@ import {ipcMain, ipcRenderer} from 'electron';
  */
 export class AppRuntime {
 
-    public static get(): AppRuntimeType {
+    public static get(): AppRuntimeName {
 
         if (ipcRenderer) {
             return 'electron-renderer';
@@ -17,24 +17,37 @@ export class AppRuntime {
 
     }
 
-    public static isElectron() {
+    /**
+     * A higher level runtime type (electron or browser)
+     */
+    public static type(): AppRuntimeType {
 
         switch (this.get()) {
 
             case 'electron-renderer':
-                return true;
+                return 'electron';
 
             case 'electron-main':
-                return true;
+                return 'electron';
 
             case 'browser':
-                return false;
+                return 'browser';
 
         }
 
     }
 
+    public static isElectron() {
+        return this.get().startsWith('electron-');
+    }
+
+    public static isBrowser() {
+        return this.get() === 'browser';
+    }
+
 }
 
-export type AppRuntimeType = 'electron-renderer' | 'electron-main' | 'browser';
+export type AppRuntimeName = 'electron-renderer' | 'electron-main' | 'browser';
+
+export type AppRuntimeType = 'electron' | 'browser';
 

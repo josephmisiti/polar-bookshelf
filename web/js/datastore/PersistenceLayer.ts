@@ -1,11 +1,14 @@
 import {DocMetaFileRef, DocMetaRef} from './DocMetaRef';
-import {DeleteResult, DocMetaSnapshotEvent, FileRef,
-        DocMetaSnapshotEventListener, SnapshotResult, ErrorListener,
-        DatastoreID,
-    Datastore} from './Datastore';
+import {
+    DeleteResult, DocMetaSnapshotEvent, FileRef,
+    DocMetaSnapshotEventListener, SnapshotResult, ErrorListener,
+    DatastoreID,
+    Datastore,
+    BinaryFileData, PrefsProvider
+} from './Datastore';
 import {DocMeta} from '../metadata/DocMeta';
 import {Backend} from './Backend';
-import {DatastoreFile} from './DatastoreFile';
+import {DocFileMeta} from './DocFileMeta';
 import {Optional} from '../util/ts/Optional';
 import {FileMeta} from './Datastore';
 import {DocInfo} from '../metadata/DocInfo';
@@ -14,6 +17,8 @@ import {DatastoreMutation} from './DatastoreMutation';
 import {NULL_FUNCTION} from '../util/Functions';
 
 export interface PersistenceLayer {
+
+    readonly id: PersistenceLayerID;
 
     /**
      * The underlying datastore backing this persistence layer.
@@ -32,7 +37,7 @@ export interface PersistenceLayer {
 
     getDocMeta(fingerprint: string): Promise<DocMeta | undefined>;
 
-    getDocMetaFiles(): Promise<DocMetaRef[]>;
+    getDocMetaRefs(): Promise<DocMetaRef[]>;
 
     /**
      * Get a current snapshot of the internal state of the Datastore by
@@ -63,10 +68,10 @@ export interface PersistenceLayer {
 
     writeFile(backend: Backend,
               ref: FileRef,
-              data: FileHandle | Buffer | string,
-              meta?: FileMeta): Promise<DatastoreFile>;
+              data: BinaryFileData,
+              meta?: FileMeta): Promise<DocFileMeta>;
 
-    getFile(backend: Backend, ref: FileRef): Promise<Optional<DatastoreFile>>;
+    getFile(backend: Backend, ref: FileRef): Promise<Optional<DocFileMeta>>;
 
     containsFile(backend: Backend, ref: FileRef): Promise<boolean>;
 
@@ -76,4 +81,5 @@ export interface PersistenceLayer {
 
 }
 
+export type PersistenceLayerID = string;
 

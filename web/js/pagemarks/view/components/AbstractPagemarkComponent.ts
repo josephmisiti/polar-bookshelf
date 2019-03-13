@@ -13,6 +13,8 @@ import {Optional} from '../../../util/ts/Optional';
 import {Rects} from '../../../Rects';
 import {Rect} from '../../../Rect';
 import {BoxController} from "../../../boxes/controller/BoxController";
+import {PagemarkMode} from '../../../metadata/PagemarkMode';
+import {DocMetas} from "../../../metadata/DocMetas";
 
 const log = Logger.create();
 
@@ -89,24 +91,26 @@ export class AbstractPagemarkComponent extends Component {
 
             log.info("Box move completed.  Updating to trigger persistence.");
 
-            const pagemark = Object.assign({}, this.pagemark);
-            pagemark.percentage = rect.toPercentage();
-            pagemark.rect = rect;
-
             const annotationEvent = this.annotationEvent!;
-
             const pageNum = annotationEvent.pageMeta.pageInfo.num;
+            const docMeta = annotationEvent.docMeta;
+
+            const pageMeta = DocMetas.getPageMeta(docMeta, pageNum);
+
+            // re-read the current pagemark from the model
+            this.pagemark = pageMeta.pagemarks[this.pagemark!.id];
+
+            const newPagemark = Object.assign({}, this.pagemark);
+            newPagemark.percentage = rect.toPercentage();
+            newPagemark.rect = rect;
 
             log.info("New pagemark: ", JSON.stringify(this.pagemark, null, "  "));
-            Pagemarks.updatePagemark(annotationEvent.docMeta, pageNum, pagemark);
+            Pagemarks.updatePagemark(annotationEvent.docMeta, pageNum, newPagemark);
+
+            this.pagemark = newPagemark;
 
         } else {
-
-            // this.pagemark.percentage = rect.toPercentage();
-            // this.pagemark.rect = rect;
-
             log.info("New pagemark: ", JSON.stringify(this.pagemark, null, "  "));
-
         }
 
         log.info("New pagemarkRect: ", this.pagemark!.rect);
@@ -157,7 +161,7 @@ export class AbstractPagemarkComponent extends Component {
             // TODO: move this to the proper component
             placementElement = <HTMLElement> container.element.querySelector(".canvasWrapper, .iframeWrapper");
             // TODO: we need to code this directly into the caller
-            log.warn("Using a default placementElement from selector: ", placementElement);
+            log.debug("Using a default placementElement from selector: ", placementElement);
         }
 
         Preconditions.assertNotNull(templateElement, "templateElement");
@@ -211,8 +215,11 @@ export class AbstractPagemarkComponent extends Component {
         pagemarkElement.className = "pagemark annotation";
 
         // pagemark.style.backgroundColor="rgb(198, 198, 198)";
-        pagemarkElement.style.backgroundColor = "#00CCFF";
-        pagemarkElement.style.opacity = "0.3";
+
+        const pagemarkColor = this.toPagemarkColor();
+
+        pagemarkElement.style.backgroundColor = pagemarkColor.backgroundColor;
+        pagemarkElement.style.opacity = "" + pagemarkColor.opacity;
 
         pagemarkElement.style.position = "absolute";
 
@@ -222,8 +229,11 @@ export class AbstractPagemarkComponent extends Component {
         const pagemarkRect = this.toOverlayRect(placementRect, this.pagemark);
 
         if (this.type === 'primary') {
-            // console.log("FIXME: placementRect: " , placementRect);
-            // console.log("FIXME: pagemarkRect (overlay rect): " , pagemarkRect);
+
+            if (pagemarkElement.children.length === 0) {
+                this.createInternalDiv(pagemarkElement);
+            }
+
         }
 
         // TODO: what I need is a generic way to cover an element and place
@@ -234,6 +244,160 @@ export class AbstractPagemarkComponent extends Component {
         pagemarkElement.style.width = `${pagemarkRect.width}px`;
         pagemarkElement.style.height = `${pagemarkRect.height}px`;
         pagemarkElement.style.zIndex = '9';
+        pagemarkElement.style.pointerEvents = 'none';
+
+    }
+
+    /**
+     * Create an internal div that allows us to turn off pointer-events
+     */
+    private createInternalDiv(pagemarkElement: HTMLElement) {
+
+        // FIXME: this works BUG we have a problem now with the context menu
+        // not showing that the pagemark is selected...  I think I have to use
+        // elementsAtPoint to reconstruct that this is on a pagemark.
+
+        const createInternalDiv = () => {
+
+            const internalDiv = document.createElement('div');
+
+            // internalDiv.style.backgroundColor = 'pink';
+            internalDiv.style.pointerEvents = 'auto';
+            internalDiv.style.position = 'absolute';
+
+            return internalDiv;
+
+        };
+
+        const createHorizontalInternalDiv = () => {
+
+            const internalDiv = createInternalDiv();
+
+            internalDiv.style.width = '100%';
+            internalDiv.style.height = '2mm';
+
+            return internalDiv;
+
+        };
+
+        const createVerticalInternalDiv = () => {
+
+            const internalDiv = createInternalDiv();
+
+            internalDiv.style.width = '2mm';
+            internalDiv.style.height = '100%';
+
+            return internalDiv;
+
+        };
+
+        const createInternalDivs = () => {
+
+            // TODO: this could be cleaned up a bit by passing position directly
+
+            const left = createVerticalInternalDiv();
+            left.style.left = '0';
+            left.style.top = '0';
+
+            const right = createVerticalInternalDiv();
+            right.style.right = '0';
+            right.style.top = '0';
+
+            const top = createHorizontalInternalDiv();
+            top.style.left = '0';
+            top.style.top = '0';
+
+            const bottom = createHorizontalInternalDiv();
+            bottom.style.bottom = '0';
+            bottom.style.left = '0';
+
+            return [ left, right, top, bottom];
+
+        };
+
+        const internalDivs = createInternalDivs();
+
+        type PointerEvents = 'auto' | 'none';
+
+        let pointerEvents: PointerEvents = 'auto';
+
+        const doChangePointerEvents = (newValue: PointerEvents) => {
+
+            if (pointerEvents !== newValue) {
+                pagemarkElement.style.pointerEvents = newValue;
+                pointerEvents = newValue;
+            }
+
+        };
+
+        for (const internalDiv of internalDivs) {
+
+            internalDiv.addEventListener('mouseenter', (event) => {
+                doChangePointerEvents('auto');
+                event.preventDefault();
+            });
+
+            internalDiv.addEventListener('mouseleave', (event) => {
+                doChangePointerEvents('none');
+                event.preventDefault();
+            });
+
+            pagemarkElement.appendChild(internalDiv);
+
+        }
+
+    }
+
+    private toPagemarkColor() {
+
+        class PagemarkColors {
+
+            public static BLUE = {
+                backgroundColor: "#00CCFF",
+                opacity: 0.3
+            };
+
+            public static LIGHTBLUE = {
+                backgroundColor: "#00CCFF",
+                opacity: 0.15
+            };
+
+            public static GREY = {
+                backgroundColor: "rgb(125, 125, 125)",
+                opacity: 0.3
+            };
+
+        }
+
+        if (! this.pagemark) {
+            return PagemarkColors.BLUE;
+        }
+
+        if (!this.pagemark.mode) {
+            return PagemarkColors.BLUE;
+        }
+
+        switch (this.pagemark.mode) {
+
+            case PagemarkMode.IGNORED:
+                return PagemarkColors.GREY;
+
+            case PagemarkMode.TABLE_OF_CONTENTS:
+                return PagemarkColors.GREY;
+
+            case PagemarkMode.APPENDEX:
+                return PagemarkColors.GREY;
+
+            case PagemarkMode.REFERENCES:
+                return PagemarkColors.GREY;
+
+            case PagemarkMode.PRE_READ:
+                return PagemarkColors.LIGHTBLUE;
+
+            default:
+                return PagemarkColors.BLUE;
+
+        }
 
     }
 
@@ -246,6 +410,8 @@ export class AbstractPagemarkComponent extends Component {
         const pagemarkElement = document.getElementById(this.createID());
 
         if (pagemarkElement) {
+
+            pagemarkElement.innerHTML = '';
 
             if (pagemarkElement.parentElement) {
                 pagemarkElement.parentElement.removeChild(pagemarkElement);
@@ -312,3 +478,8 @@ export interface ElementOptions {
 }
 
 type PagemarkComponentType = 'primary' | 'thumbnail';
+
+interface PagemarkColor {
+    backgroundColor: string;
+    opacity: number;
+}

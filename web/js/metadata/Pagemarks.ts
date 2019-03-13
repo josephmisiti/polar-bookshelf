@@ -12,9 +12,14 @@ import {DocMeta} from './DocMeta';
 import {DocMetas} from './DocMetas';
 import {isPresent, Preconditions} from '../Preconditions';
 import {ISODateTimeString, ISODateTimeStrings} from './ISODateTimeStrings';
-import {PageNumber} from './PageMeta';
+import {PageMeta, PageNumber} from './PageMeta';
 import {Numbers} from "../util/Numbers";
 import {Reducers} from '../util/Reducers';
+import {ProgressByMode, ReadingProgress} from './ReadingProgress';
+import {ReadingProgresses} from './ReadingProgresses';
+import {Provider} from '../util/Providers';
+import {HitMap} from '../util/HitMap';
+import {ReadingOverviews} from './ReadingOverviews';
 
 const log = Logger.create();
 
@@ -25,12 +30,15 @@ const DEFAULT_PAGEMARK_RECT = new PagemarkRect({
     height: 100
 });
 
-let sequence = 0;
-
 export class Pagemarks {
 
+    public static sequences = {
+        id: 0,
+        batch: 0
+    };
+
     public static createID(created: ISODateTimeString) {
-        return Hashcodes.createID({created, sequence: sequence++});
+        return Hashcodes.createID({created, sequence: this.sequences.id++});
     }
 
     /**
@@ -46,6 +54,9 @@ export class Pagemarks {
         if (end < 1) {
             throw new Error("Page number must be 1 or more");
         }
+
+        const created = ISODateTimeStrings.create();
+        const batch = Hashcodes.createID({created, id: this.sequences.batch++});
 
         const calculateStartPage = () => {
 
@@ -127,10 +138,15 @@ export class Pagemarks {
 
             for (const pageNum of Numbers.range(start, end)) {
 
-                const rect = createPagemarkRect(pageNum, pageNum === end ? percentage : 100);
+                const rectPercentage =
+                    pageNum === end ? percentage : 100;
+
+                const rect = createPagemarkRect(pageNum, rectPercentage);
 
                 if (rect) {
-                    const pagemark = Pagemarks.create({rect});
+
+                    const pagemark = Pagemarks.create({created, rect, batch});
+
                     Pagemarks.updatePagemark(docMeta, pageNum, pagemark);
 
                     result.push({pageNum, pagemark});
@@ -191,7 +207,11 @@ export class Pagemarks {
             throw new Error(msg);
         }
 
-        const created = ISODateTimeStrings.create();
+        const created = options.created || ISODateTimeStrings.create();
+
+        const batch = options.batch || Hashcodes.createID({created, id: this.sequences.batch++});
+
+        const mode = options.mode || PagemarkMode.READ;
 
         return new Pagemark({
 
@@ -203,7 +223,9 @@ export class Pagemarks {
             type: options.type,
             percentage: keyOptions.percentage,
             column: options.column,
-            rect: keyOptions.rect
+            rect: keyOptions.rect,
+            batch,
+            mode
 
         });
 
@@ -262,17 +284,17 @@ export class Pagemarks {
             }
 
             if (! pagemark.id) {
-                log.debug("Pagemark given ID");
+                // log.debug("Pagemark given ID");
                 pagemark.id = key;
             }
 
             if ( ! pagemark.mode) {
-                log.debug("Using default pagemark mode.");
+                // log.debug("Using default pagemark mode.");
                 pagemark.mode = PagemarkMode.READ;
             }
 
             if ( ! isPresent(pagemark.percentage)) {
-                log.debug("No pagemark percentage. Assigning zero.");
+                // log.debug("No pagemark percentage. Assigning zero.");
                 pagemark.percentage = 0;
             }
 
@@ -283,35 +305,257 @@ export class Pagemarks {
     }
 
     /**
+     * Update pagemarks on the given page.
      *
-     * @param docMeta
-     * @param pageNum
-     *
-     * @param pagemark An optional pagemark to update.  If the pagemark isn't
-     * specified all the pagemarks on the page are deleted and progress updated.
+     * @param pagemark The pagemark to update.
      */
-    public static updatePagemark(docMeta: DocMeta, pageNum: number, pagemark?: Pagemark) {
+    public static updatePagemark(docMeta: DocMeta, pageNum: number, pagemark: Pagemark) {
 
-        Preconditions.assertPresent(pageNum, "pageNum");
+        this.doDocMetaMutation(docMeta, pageNum, () => {
+            const pageMeta = DocMetas.getPageMeta(docMeta, pageNum);
 
-        const pageMeta = docMeta.getPageMeta(pageNum);
+            this.doPageMetaMutation(pageMeta, () => {
+                pageMeta.pagemarks[pagemark.id] = pagemark;
+            });
 
-        if (pagemark) {
-            // set the pagemark that we just created into the map.
-            pageMeta.pagemarks[pagemark.id] = pagemark;
-        } else {
-            // delete the pagemarks on the page.
-            Objects.clear(pageMeta.pagemarks);
-        }
-
-        // TODO: this actually requires TWO disk syncs and we're going to
-        // need a way to resolve this in the future. It would be nice to
-        // elide these to one somehow by hinting to the persistenceLayer
-        // used in the model to start a batch around these objects then
-        // commit just the last one.
-        docMeta.docInfo.progress = (DocMetas.computeProgress(docMeta) * 100);
+        });
 
     }
+
+    /**
+     * Replace the pagemarks with a new pagemark with the given options
+     * replaced.
+     */
+    public static replacePagemark(docMeta: DocMeta,
+                                  pagemarkPtr: PagemarkPTR,
+                                  options: ReplacePagemarkOptions) {
+
+        const pagemarksToMutate = () => {
+
+            // the pagemarks to mutate.
+            const result: PagemarkPageMetaRef[] = [];
+
+            if (pagemarkPtr.ref) {
+
+                // TODO: since we're given a pagemark directly shouldn't
+                // we also resolve by the batch?
+
+                // find the pagemarks by ref...
+                const pageMeta = DocMetas.getPageMeta(docMeta, pagemarkPtr.ref.pageNum);
+                result.push({pageMeta, id: pagemarkPtr.ref.pagemark.id});
+            }
+
+            if (pagemarkPtr.batch) {
+                // find the pagemarks by batch...
+                result.push(...this.pagemarksWithinBatch(docMeta, pagemarkPtr.batch));
+            }
+
+            return result;
+
+        };
+
+        // find what we should mutate
+        const pagemarkRefs = pagemarksToMutate();
+
+        // now perform the mutations on the pagemarks.  At the end we should
+        // STILL compute the progress on the document as we are changing the
+        // types on the pagemark.
+        DocMetas.withBatchedMutations(docMeta, () => {
+
+            for (const ref of pagemarkRefs) {
+
+                const currPagemark = ref.pageMeta.pagemarks[ref.id];
+
+                const newPagemark = new Pagemark(currPagemark);
+
+                if (options.mode) {
+                    newPagemark.mode = options.mode;
+                }
+
+                this.doPageMetaMutation(ref.pageMeta, () => {
+                    ref.pageMeta.pagemarks[ref.id] = newPagemark;
+                });
+
+            }
+
+        });
+
+    }
+
+    /**
+     *
+     * @param id When id is specified we delete just a specific pagemark,
+     * otherwise we delete all of them.
+     */
+    public static deletePagemark(docMeta: DocMeta, pageNum: number, id?: string) {
+
+        this.doDocMetaMutation(docMeta, pageNum, () => {
+
+            const pageMeta = DocMetas.getPageMeta(docMeta, pageNum);
+
+            let pageMetaMutator: VOID_FUNCTION | undefined;
+
+            if (id) {
+
+                const primaryPagemark = pageMeta.pagemarks[id];
+
+                if (primaryPagemark) {
+
+                    if (primaryPagemark.batch) {
+
+                        // if this pagemark has a batch we have to delete everything
+                        // in the same batch
+
+                        const pagemarksWithinBatch
+                            = this.pagemarksWithinBatch(docMeta, primaryPagemark.batch);
+
+                        pageMetaMutator = () => {
+
+                            for (const pagemarkRef of pagemarksWithinBatch) {
+                                delete pagemarkRef.pageMeta.pagemarks[pagemarkRef.id];
+                            }
+
+                        };
+
+
+                    } else {
+
+                        pageMetaMutator = () => delete pageMeta.pagemarks[id];
+
+                    }
+
+                } else {
+                    log.warn(`No pagemark found for id ${id} for pageNum ${pageNum}`);
+                }
+
+            } else {
+                pageMetaMutator = () => Objects.clear(pageMeta.pagemarks);
+            }
+
+            this.doPageMetaMutation(pageMeta, pageMetaMutator);
+
+        });
+
+    }
+
+    /**
+     * Scan all the pagemarks finding ones with the same batch.
+     */
+    private static pagemarksWithinBatch(docMeta: DocMeta, batch: string): ReadonlyArray<PagemarkPageMetaRef> {
+
+        const result = [];
+
+        const nrPages = Object.keys(docMeta.pageMetas).length;
+
+        for (let pageIdx = 1; pageIdx <= nrPages; ++pageIdx) {
+            const pageMeta = DocMetas.getPageMeta(docMeta, pageIdx);
+
+            for (const pagemark of Object.values(pageMeta.pagemarks || {})) {
+
+                if (pagemark.batch === batch) {
+                    result.push({pageMeta, id: pagemark.id});
+                }
+
+            }
+
+        }
+
+        return result;
+
+    }
+
+    private static doDocMetaMutation(docMeta: DocMeta,
+                                     pageNum: number,
+                                     pagemarkMutator: () => void): void {
+
+        Preconditions.assertPresent(docMeta, "docMeta");
+        Preconditions.assertPresent(pageNum, "pageNum");
+
+        DocMetas.withBatchedMutations(docMeta, () => {
+
+            pagemarkMutator();
+
+            const progress = Math.floor(DocMetas.computeProgress(docMeta) * 100);
+            docMeta.docInfo.progress = progress;
+
+            docMeta.docInfo.readingPerDay
+                = ReadingOverviews.compute(Object.values(docMeta.pageMetas));
+
+        });
+
+    }
+
+    /**
+     * Mutate the pagemarks on the PageMeta and also update the readingProgress
+     */
+    private static doPageMetaMutation(pageMeta: PageMeta, pageMetaMutator?: VOID_FUNCTION): void {
+
+        if (! pageMetaMutator) {
+            return;
+        }
+
+        const createProgressByMode = () => {
+
+            const result = new HitMap();
+
+            for (const pagemark of Object.values(pageMeta.pagemarks)) {
+                const mode = pagemark.mode || PagemarkMode.READ;
+                result.registerHit(mode, pagemark.percentage);
+            }
+
+            return result.toLiteralMap();
+
+        };
+
+        const writeReadingProgress = (preExisting?: boolean) => {
+
+            const progress = Object.values(pageMeta.pagemarks)
+                .map(current => current.percentage)
+                .reduce(Reducers.SUM, 0);
+
+            const progressByMode = createProgressByMode();
+
+            const readingProgress =
+                ReadingProgresses.create(progress, progressByMode, preExisting);
+
+            pageMeta.readingProgress[readingProgress.id] = readingProgress;
+
+        };
+
+        const doPreExisting =
+            Dictionaries.empty(pageMeta.readingProgress) && ! Dictionaries.empty(pageMeta.pagemarks);
+
+        if (doPreExisting) {
+            writeReadingProgress(true);
+        }
+
+        pageMetaMutator();
+
+        writeReadingProgress();
+
+    }
+
+    public static computeReadingProgressStats(docMetaProviders: ReadonlyArray<Provider<DocMeta>>) {
+
+        // TODO: we don't ahve the pageMeta here so maybe we could just write
+        // out a minimal vector of day + number of the number of pages we've
+        // read to the DocInfo
+
+        for (const docMetaProvider of docMetaProviders) {
+
+            const docMeta = docMetaProvider();
+
+
+
+        }
+
+    }
+
+}
+
+interface PagemarkPageMetaRef {
+    readonly pageMeta: PageMeta;
+    readonly id: string;
 
 }
 
@@ -331,6 +575,29 @@ export interface PagemarkOptions {
     percentage: number;
 
     column: number;
+
+    batch?: string;
+
+    created?: string;
+
+    mode?: PagemarkMode;
+
+}
+
+/**
+ * A pointer to a pagemark either by id , batch.
+ */
+export interface PagemarkPTR {
+
+    readonly ref?: PagemarkRef;
+
+    readonly batch?: string;
+
+}
+
+export interface ReplacePagemarkOptions {
+
+    readonly mode?: PagemarkMode;
 
 }
 
@@ -365,3 +632,5 @@ export interface KeyPagemarkOptions {
     percentage: number;
 
 }
+
+export type VOID_FUNCTION = () => void;

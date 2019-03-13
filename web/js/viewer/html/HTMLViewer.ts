@@ -13,6 +13,12 @@ import {BackgroundFrameResizer} from './BackgroundFrameResizer';
 import {Descriptors} from './Descriptors';
 import {IFrameWatcher} from './IFrameWatcher';
 import {FrameResizer} from './FrameResizer';
+import {RendererAnalytics} from '../../ga/RendererAnalytics';
+import {DocMetas} from '../../metadata/DocMetas';
+import {CapturedScreenshots} from '../../screenshots/CapturedScreenshots';
+import {ViewerScreenshots} from '../ViewerScreenshots';
+import {Arrays} from '../../util/Arrays';
+import {Elements} from '../../util/Elements';
 
 const log = Logger.create();
 
@@ -49,11 +55,13 @@ export class HTMLViewer extends Viewer {
 
         this.htmlFormat = new HTMLFormat();
 
+        RendererAnalytics.pageview("/htmlviewer");
+
         // *** start the resizer and initializer before setting the iframe
 
-        $(document).ready(async () => {
+        this.requestParams = this._requestParams();
 
-            this.requestParams = this._requestParams();
+        $(document).ready(async () => {
 
             this._captureBrowserZoom();
 
@@ -67,7 +75,11 @@ export class HTMLViewer extends Viewer {
 
                 log.info("Loading page now...");
 
-                const backgroundFrameResizer = new BackgroundFrameResizer(this.contentParent, this.content);
+                const backgroundFrameResizer
+                    = new BackgroundFrameResizer(this.contentParent,
+                                                 this.content,
+                                                 () => this.onResized());
+
                 backgroundFrameResizer.start();
 
                 const frameInitializer = new FrameInitializer(this.content, this.textLayer);
@@ -87,6 +99,25 @@ export class HTMLViewer extends Viewer {
             await Services.start(new LinkHandler(this.content));
 
         });
+
+    }
+
+    private onResized() {
+
+        const docMeta = this.model.docMeta;
+
+        const pageMeta = DocMetas.getPageMeta(docMeta, 1);
+
+        if (! pageMeta.pageInfo.dimensions) {
+
+            const width = this.content.offsetWidth;
+            const height = this.content.offsetHeight;
+
+            pageMeta.pageInfo.dimensions = {width, height};
+
+        }
+
+        // ViewerScreenshots.doScreenshot();
 
     }
 
@@ -189,12 +220,8 @@ export class HTMLViewer extends Viewer {
 
         this._changeScaleMeta(scale);
         this._changeScale(scale);
-        this._resizeFrame();
         this._removeAnnotations();
         this._signalScale();
-
-        // FIXME: perform a resize on the iframe since the hosted content
-        // should be larger and we need to expand its size.
 
     }
 
@@ -223,28 +250,17 @@ export class HTMLViewer extends Viewer {
 
         // iframeParentElement.removeChild(iframe);
 
-        // FIXME: run an algorithm to maek sure there are no elements between two
-        // paths in the DOM that have any scrollHeight > their height.
+        // FIXME: run an algorithm to make sure there are no elements between
+        // two paths in the DOM that have any scrollHeight > their height.
 
         const contentParent = notNull(document.querySelector("#content-parent"));
         (contentParent as HTMLElement).style.transform = `scale(${scale})`;
 
-        const height = parseInt(this.content.getAttribute('data-height')!);
+        const height = parseInt(this.content.getAttribute('data-original-height')!);
         const newHeight = height * scale;
 
-        const host = contentParent.parentElement!;
-
-        host.style.height = `${newHeight}px`;
-        this.content.style.height = `${newHeight}px`;
-
-    }
-
-    private _resizeFrame() {
-
-        // setTimeout(() => {
-        //     console.log("FIXME resizing");
-        //     this.frameResizer!.resize(true);
-        // }, 1000);
+        this.frameResizer!.resize(true, newHeight)
+            .catch(err => log.error("Unable to change scale: ", err));
 
     }
 
@@ -341,9 +357,9 @@ export class HTMLViewer extends Viewer {
         // https://www.youtube.com/watch?v=CP1BVpF-NjY
 
         const u = new URL(url);
-        const video_id = u.searchParams.get('v');
+        const videoID = u.searchParams.get('v');
 
-        return `<iframe width="${width}" height="${height}" src="https://www.youtube.com/embed/${video_id}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>`;
+        return `<iframe width="${width}" height="${height}" src="https://www.youtube.com/embed/${videoID}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>`;
     }
 
     public docDetail(): DocDetail {

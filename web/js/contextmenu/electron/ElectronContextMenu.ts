@@ -1,13 +1,14 @@
 import {TriggerEvent} from '../TriggerEvent';
-import {WebContents, Menu, MenuItem, BrowserWindow, ipcMain} from 'electron';
+import {BrowserWindow, ipcMain, Menu, MenuItem, WebContents} from 'electron';
 import {Logger} from '../../logger/Logger';
-import PopupOptions = Electron.PopupOptions;
 import {Arrays} from '../../util/Arrays';
 import {Broadcaster} from '../../ipc/Broadcaster';
 import {Preconditions} from '../../Preconditions';
 import {ContextMenuType} from '../ContextMenuType';
-import {Messenger} from '../../electron/messenger/Messenger';
 import {AnnotationSidebarClient} from '../../annotation_sidebar/AnnotationSidebarClient';
+import {PagemarkModes} from '../../metadata/PagemarkModes';
+import {ContextMenuMessages} from '../ContextMenuMessages';
+import PopupOptions = Electron.PopupOptions;
 
 const log = Logger.create();
 
@@ -55,29 +56,6 @@ export class ElectronContextMenu {
         // always what we want.
         ctxMenu.popup(<PopupOptions> {
             window
-        });
-
-    }
-
-    private async postContextMenuMessage(name: string, triggerEvent: TriggerEvent) {
-
-        log.info("postContextMenuMessage: " + name);
-
-        // TODO: this should use its own type of ContextMenuMessage with the
-        // ContextMenuLocation and a type field.
-
-        // TODO: just send the full TriggerEvent but rename it to
-        // ContextMenuSelectedEvent or something along those lines.
-
-        await Messenger.postMessage({
-            message: {
-                type: name,
-                point: triggerEvent.point,
-                points: triggerEvent.points,
-                pageNum: triggerEvent.pageNum,
-                matchingSelectors: triggerEvent.matchingSelectors,
-                docDescriptor: triggerEvent.docDescriptor
-            }
         });
 
     }
@@ -179,7 +157,7 @@ export class ElectronContextMenu {
             new MenuItem({
                 label: 'Delete',
                 // accelerator: 'CmdOrCtrl+A',
-                click: () => this.cmdNotify("delete-text-highlight", triggerEvent, sender)
+                click: () => ContextMenuMessages.postContextMenuMessage("delete-text-highlight", triggerEvent)
             })
         ]));
 
@@ -210,7 +188,7 @@ export class ElectronContextMenu {
             new MenuItem({
                 label: 'Delete',
                 // accelerator: 'CmdOrCtrl+A',
-                click: () => this.postContextMenuMessage("delete-area-highlight", triggerEvent)
+                click: () => ContextMenuMessages.postContextMenuMessage("delete-area-highlight", triggerEvent)
             })
         ]));
 
@@ -220,19 +198,28 @@ export class ElectronContextMenu {
 
     /**
      *
-     * @param triggerEvent {TriggerEvent}
-     * @param sender
-     * @return {Electron.Menu}
      */
     private createPagemarkContextMenu(triggerEvent: TriggerEvent, sender: WebContents): Menu {
 
         const ctxMenu = new Menu();
 
+        const createModeSubmenuItems = () => {
+
+            return PagemarkModes.toDescriptors().map(current => {
+                return new MenuItem({
+                     label: current.title,
+                     click: () => ContextMenuMessages.postContextMenuMessage("set-pagemark-mode-" + current.key, triggerEvent)
+                 });
+            });
+
+        };
+
         ctxMenu.append(this.createSubmenu('Pagemark', [
+            this.createSubmenu('Mode ...', createModeSubmenuItems()),
             new MenuItem({
                 label: 'Delete Pagemark',
                 // accelerator: 'CmdOrCtrl+A',
-                click: () => this.postContextMenuMessage("delete-pagemark", triggerEvent)
+                click: () => ContextMenuMessages.postContextMenuMessage("delete-pagemark", triggerEvent)
             })
         ]));
 
@@ -242,9 +229,6 @@ export class ElectronContextMenu {
 
     /**
      *
-     * @param triggerEvent {TriggerEvent}
-     * @param sender
-     * @return {Electron.Menu}
      */
     private createPageContextMenu(triggerEvent: TriggerEvent, sender: WebContents): Menu {
 
@@ -277,17 +261,17 @@ export class ElectronContextMenu {
             label: 'Create Pagemark to Point',
             // accelerator: "CommandOrControl+Alt+LeftClick",
             // registerAccelerator: false,
-            click: () => this.postContextMenuMessage("create-pagemark-to-point", triggerEvent)
+            click: () => ContextMenuMessages.postContextMenuMessage("create-pagemark-to-point", triggerEvent)
         }));
 
         ctxMenu.append(new MenuItem({
             label: 'Create Pagemark Box',
-            click: () => this.postContextMenuMessage("create-pagemark", triggerEvent)
+            click: () => ContextMenuMessages.postContextMenuMessage("create-pagemark", triggerEvent)
         }));
 
         ctxMenu.append(new MenuItem({
             label: 'Create Area Highlight',
-            click: () => this.postContextMenuMessage("create-area-highlight", triggerEvent)
+            click: () => ContextMenuMessages.postContextMenuMessage("create-area-highlight", triggerEvent)
         }));
 
         // ctxMenu.append(new MenuItem({
@@ -306,9 +290,6 @@ export class ElectronContextMenu {
 
     /**
      *
-     * @param triggerEvent
-     * @param sender
-     * @return {Electron.Menu}
      */
     private createDefaultContextMenu(triggerEvent: TriggerEvent, sender: WebContents): Menu {
 

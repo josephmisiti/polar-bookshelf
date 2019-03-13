@@ -1,15 +1,14 @@
-import {CurrentState, DocFormat} from './DocFormat';
+import {CurrentDocState, DocFormat} from './DocFormat';
 import {Preconditions} from '../Preconditions';
 
 declare var window: any;
 
 export class PDFFormat extends DocFormat {
 
-    public readonly name: string;
+    public readonly name = 'pdf';
 
     constructor() {
         super();
-        this.name = "pdf";
     }
 
     /**
@@ -31,14 +30,13 @@ export class PDFFormat extends DocFormat {
     /**
      * Get the current state of the doc.
      */
-    public currentState(event: any): CurrentState {
+    public currentState(): CurrentDocState {
 
         Preconditions.assertNotNull(event, "event");
 
         return {
             nrPages: window.PDFViewerApplication.pagesCount,
             currentPageNumber: window.PDFViewerApplication.pdfViewer.currentPageNumber,
-            pageElement: event.target.parentElement
         };
 
     }

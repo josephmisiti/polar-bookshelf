@@ -1,6 +1,10 @@
 import * as React from 'react';
-import {Button, Modal, ModalBody, ModalFooter, ModalHeader} from 'reactstrap';
 import {WhatsNewContent} from './WhatsNewContent';
+import Modal from 'reactstrap/lib/Modal';
+import ModalHeader from 'reactstrap/lib/ModalHeader';
+import ModalBody from 'reactstrap/lib/ModalBody';
+import Button from 'reactstrap/lib/Button';
+import ModalFooter from 'reactstrap/lib/ModalFooter';
 
 export class WhatsNewModal extends React.Component<IProps, IState> {
 
@@ -34,6 +38,7 @@ export class WhatsNewModal extends React.Component<IProps, IState> {
                     </ModalFooter>
 
                 </Modal>
+
             </div>
 
         );

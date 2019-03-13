@@ -2,7 +2,6 @@ import {app, BrowserWindow, dialog} from 'electron';
 import {ResourcePaths} from '../../electron/webresource/ResourcePaths';
 import {Logger} from '../../logger/Logger';
 import {Services} from '../../util/services/Services';
-import {FileLoader} from './loaders/FileLoader';
 import {Webserver} from '../../backend/webserver/Webserver';
 import {BROWSER_WINDOW_OPTIONS, MainAppBrowserWindowFactory} from './MainAppBrowserWindowFactory';
 import {AppLauncher} from './AppLauncher';
@@ -16,6 +15,8 @@ import {CaptureOpts} from '../../capture/CaptureOpts';
 import {Platform, Platforms} from '../../util/Platforms';
 import MenuItem = Electron.MenuItem;
 import {MainAppExceptionHandlers} from './MainAppExceptionHandlers';
+import {FileLoader} from './file_loaders/FileLoader';
+import {FileImportRequests} from '../repository/FileImportRequests';
 
 const log = Logger.create();
 
@@ -65,7 +66,9 @@ export class MainAppController {
 
         // send the messages to the renderer context now so that we can bulk
         // import them into the repo.
-        FileImportClient.send({files});
+        if (files) {
+            FileImportClient.send(FileImportRequests.fromPaths(files));
+        }
 
     }
 
@@ -80,59 +83,83 @@ export class MainAppController {
 
     public exitApp() {
 
+        // we have a collection of flags here controlling shutdown as Electron
+        // is picky in some situations regarding raising exceptions and we're
+        // still trying to track down the proper way to handle app quit.
+
+        const doProcessExit = true;
+        const doAppQuit = true;
+        const doServicesStop = true;
+
+        const doWindowGC = false;
+
+        const doCloseWindows = false;
+        const doDestroyWindows = false;
+
         // the exception handlers need to be re-registered as I think they're
         // being removed on exit (possibly by sentry?)
         MainAppExceptionHandlers.register();
 
         log.info("Exiting app...");
 
-        log.info("Shutting down services...");
-        Services.stop({
-            webserver: this.webserver,
-        });
-        log.info("Shutting down services...done");
+        if (doWindowGC) {
 
-        log.info("Getting all browser windows...");
-        const browserWindows = BrowserWindow.getAllWindows();
-        log.info("Getting all browser windows...done");
+            log.info("Getting all browser windows...");
+            const browserWindows = BrowserWindow.getAllWindows();
+            log.info("Getting all browser windows...done");
 
-        log.info("Closing all windows...");
-
-        if (Platforms.get() !== Platform.WINDOWS) {
-
-            // this causes Windows to segfault so avoid it.  It might also not
-            // strictly be necessary.
+            log.info("Closing/destroying all windows...");
 
             for (const browserWindow of browserWindows) {
                 const id = browserWindow.id;
 
-                let url: string | undefined;
+                if (! browserWindow.isDestroyed()) {
 
-                if (browserWindow.webContents) {
-                    url = browserWindow.webContents.getURL();
-                }
+                    if (doCloseWindows && browserWindow.isClosable()) {
+                        log.info(`Closing window id=${id}`);
+                        browserWindow.close();
+                    }
 
-                log.info(`Closing window id=${id}, url=${url}`);
+                    if (doDestroyWindows) {
+                        log.info(`Destroying window id=${id}`);
+                        browserWindow.destroy();
+                    }
 
-                if (browserWindow.isClosable() && ! browserWindow.isDestroyed()) {
-                    log.info(`Closing window id=${id}, url=${url}`);
-                    browserWindow.close();
-                    browserWindow.destroy();
                 } else {
-                    log.info(`Skipping close window (not closeable) id=${id}, url=${url}`);
+                    log.info(`Skipping destroy window (is destroyed) id=${id}`);
                 }
+
             }
+
+            log.info("Closing/destroying all windows...done");
 
         }
 
-        log.info("Closing all windows...done");
+        if (doServicesStop) {
 
-        log.info("Exiting electron...");
+            log.info("Stopping services...");
 
-        app.quit();
+            Services.stop({
+                webserver: this.webserver,
+            });
 
-        log.info("Exiting main...");
-        process.exit();
+            log.info("Stopping services...done");
+
+        }
+
+        if (doAppQuit) {
+            log.info("Quitting app...");
+
+            app.quit();
+
+            log.info("Quitting app...done");
+        }
+
+        if (doProcessExit) {
+            log.info("Process exit...");
+            process.exit();
+            log.info("Process exit...done");
+        }
 
     }
 
@@ -233,11 +260,11 @@ export class MainAppController {
     /**
      * Open a dialog box for a PDF file.
      */
-    private async promptImportDocs(): Promise<string[]> {
+    private async promptImportDocs(): Promise<string[] | undefined> {
 
         const downloadsDir = app.getPath('downloads');
 
-        return new Promise<string[]>((resolve) => {
+        return new Promise<string[] | undefined>((resolve) => {
 
             dialog.showOpenDialog({
                   title: "Import Document",
@@ -259,11 +286,3 @@ export class MainAppController {
 
 }
 
-export interface FileImportRequest {
-
-    /**
-     * The array of files to import.
-     */
-    readonly files: string[];
-
-}
