@@ -7,6 +7,7 @@ import {Logger} from '../../../../logger/Logger';
 import {PDFLoader} from '../../file_loaders/PDFLoader';
 import {IDocLoader, IDocLoadRequest} from '../IDocLoader';
 import {Nav} from '../../../../ui/util/Nav';
+import {PHZLoader} from '../../file_loaders/PHZLoader';
 
 const log = Logger.create();
 
@@ -23,8 +24,8 @@ export class BrowserDocLoader implements IDocLoader {
         const linkLoader = Nav.createLinkLoader();
 
         Preconditions.assertPresent(loadDocRequest.fingerprint, "fingerprint");
-        Preconditions.assertPresent(loadDocRequest.fileRef, "fileRef");
-        Preconditions.assertPresent(loadDocRequest.fileRef.name, "fileRef.name");
+        Preconditions.assertPresent(loadDocRequest.backendFileRef, "backendFileRef");
+        Preconditions.assertPresent(loadDocRequest.backendFileRef.name, "backendFileRef.name");
 
         const persistenceLayer = this.persistenceLayerProvider.get();
 
@@ -32,20 +33,27 @@ export class BrowserDocLoader implements IDocLoader {
 
             async load(): Promise<void> {
 
-                const optionalDatastoreFile
-                    = await persistenceLayer.getFile(Backend.STASH, loadDocRequest.fileRef);
+                const {backendFileRef} = loadDocRequest;
 
-                if (optionalDatastoreFile.isPresent()) {
+                const datastoreFile = persistenceLayer.getFile(backendFileRef.backend, backendFileRef);
 
-                    const datastoreFile = optionalDatastoreFile.get();
+                const toViewerURL = () => {
 
-                    const viewerURL = PDFLoader.createViewerURL(datastoreFile.url, loadDocRequest.fileRef.name);
+                    const fileName = backendFileRef.name;
 
-                    linkLoader.load(viewerURL);
+                    if (fileName.endsWith(".pdf")) {
+                        return PDFLoader.createViewerURL(datastoreFile.url, backendFileRef.name);
+                    } else if (fileName.endsWith(".phz")) {
+                        return PHZLoader.createViewerURL(datastoreFile.url, backendFileRef.name);
+                    } else {
+                        throw new Error("Unable to handle file: " + fileName);
+                    }
 
-                } else {
-                    log.warn("No datastore file for: ", loadDocRequest);
-                }
+                };
+
+                const viewerURL = toViewerURL();
+
+                linkLoader.load(viewerURL);
 
             }
 

@@ -7,17 +7,14 @@ import {Logger} from '../logger/Logger';
 import {Viewer} from '../viewer/Viewer';
 import {DocTitleController} from './DocTitleController';
 import {PagemarkController} from '../pagemarks/controller/PagemarkController';
-import {AnkiSyncController} from './AnkiSyncController';
 import {Controller} from './Controller';
 import {TextHighlightController} from '../highlights/text/controller/TextHighlightController';
-import {FlashcardsController} from '../flashcards/controller/FlashcardsController';
-import {AnnotationsController} from '../annotations/controller/AnnotationsController';
 import {DocFormat} from '../docformat/DocFormat';
 import {AreaHighlightController} from '../highlights/area/controller/AreaHighlightController';
 import {PagemarkCoverageEventListener} from '../pagemarks/controller/PagemarkCoverageEventListener';
 import {DocDetails} from '../metadata/DocDetails';
 import {Optional} from '../util/ts/Optional';
-import {AppRuntime} from '../AppRuntime';
+import {ClipboardCleanser} from '../ui/ClipboardCleanser';
 
 
 const log = Logger.create();
@@ -45,7 +42,7 @@ export class WebController extends Controller {
 
         new PagemarkController(model).start();
         new DocTitleController(this.model).start();
-
+        ClipboardCleanser.register();
     }
 
     public async start() {

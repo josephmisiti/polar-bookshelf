@@ -1,3 +1,7 @@
+import {Platforms} from '../../util/Platforms';
+import {AppRuntime} from '../../AppRuntime';
+import {shell} from 'electron';
+
 export class Nav {
 
     public static createHashURL(hash: string) {
@@ -8,10 +12,18 @@ export class Nav {
 
     public static openLinkWithNewTab(link: string) {
 
-        const win = window.open(link, '_blank');
+        if (AppRuntime.isBrowser()) {
 
-        if (win) {
-            win.focus();
+            const win = window.open(link, '_blank');
+
+            if (win) {
+                win.focus();
+            }
+
+        } else {
+            shell.openExternal(link)
+                .catch(err => console.error(err));
+
         }
 
     }
@@ -23,11 +35,27 @@ export class Nav {
      */
     public static createLinkLoader(opts: LinkLoaderOpts = {focus: true}): LinkLoader {
 
-        // https://stackoverflow.com/questions/19026162/javascript-window-open-from-callback
+        if (Platforms.type() === 'desktop') {
+            return new DesktopLinkLoader(opts);
+        } else {
+            return new MobileLinkLoader();
+        }
+
+    }
+
+}
+
+class DesktopLinkLoader implements LinkLoader {
+
+    private readonly win: Window;
+
+    constructor(opts: LinkLoaderOpts) {
 
         const win = window.open('', '_blank');
 
         if (win) {
+
+            this.win = win;
 
             if (opts.focus) {
                 win.focus();
@@ -35,20 +63,23 @@ export class Nav {
 
             win.document.write("Loading...");
 
-            return {
-
-                load(link: string): void {
-                    win.location.href = link;
-                }
-
-            };
-
         } else {
             throw new Error("Unable to create window");
         }
 
     }
 
+    public load(link: string): void {
+        this.win.location.href = link;
+    }
+
+}
+
+class MobileLinkLoader implements LinkLoader {
+
+    public load(link: string): void {
+        document.location!.href = link;
+    }
 
 }
 

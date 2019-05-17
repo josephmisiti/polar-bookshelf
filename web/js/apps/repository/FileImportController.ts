@@ -1,25 +1,20 @@
 import {PersistenceLayer} from "../../datastore/PersistenceLayer";
 import {ipcRenderer} from "electron";
+import {remote} from 'electron';
 import {Logger} from '../../logger/Logger';
 import {ImportedFile, PDFImporter} from './importers/PDFImporter';
-import {ProgressCalculator} from "../../util/ProgressCalculator";
 import {IEventDispatcher} from '../../reactor/SimpleReactor';
 import {IDocInfo} from '../../metadata/DocInfo';
 import {Optional} from "../../util/ts/Optional";
-import {FilePaths} from "../../util/FilePaths";
 import {isPresent} from "../../Preconditions";
 import {Toaster} from "../../ui/toaster/Toaster";
 import {IProvider} from "../../util/Providers";
 import {DeterminateProgressBar} from '../../ui/progress_bar/DeterminateProgressBar';
 import {DocLoader} from "../main/doc_loaders/DocLoader";
-import {FileRef} from "../../datastore/Datastore";
 import {Blackout} from "../../ui/blackout/Blackout";
 import {FileImportRequest} from "./FileImportRequest";
 import {AddFileRequest} from "./AddFileRequest";
 import {AppRuntime} from "../../AppRuntime";
-import {PathStr} from '../../util/Strings';
-import {Files, Aborters} from "../../util/Files";
-import {ProgressToasters} from '../../ui/progress_toaster/ProgressToasters';
 import {AddFileRequests} from "./AddFileRequests";
 import {ProgressTracker} from '../../util/ProgressTracker';
 
@@ -221,6 +216,8 @@ export class FileImportController {
 
     private async onImportFiles(files: AddFileRequest[]) {
 
+        this.forceWindowFocus();
+
         const importedFiles = await this.doImportFiles(files);
 
         if (importedFiles.length === 0) {
@@ -228,6 +225,8 @@ export class FileImportController {
             // nothing to do here...
             return;
         }
+
+        // Toaster.info(`Importing ${files.length} file(s) (one moment please).`);
 
         if (AppRuntime.isElectron() && importedFiles.length === 1) {
 
@@ -250,7 +249,7 @@ export class FileImportController {
 
                     this.docLoader.create({
                         fingerprint,
-                        fileRef: file.fileRef,
+                        backendFileRef: file.backendFileRef,
                         newWindow: true
                     }).load()
                       .catch(err => log.error("Unable to load doc: ", err));
@@ -259,8 +258,19 @@ export class FileImportController {
 
             }
 
-        } else {
-            Toaster.success(`Imported ${files.length} files successfully.`);
+        }
+
+
+        if (importedFiles.length !== 1) {
+            Toaster.success(`Imported ${files.length} file(s) successfully.`);
+        }
+
+    }
+
+    private forceWindowFocus() {
+
+        if (remote) {
+            remote.getCurrentWindow().focus();
         }
 
     }
@@ -277,9 +287,10 @@ export class FileImportController {
 
                 try {
                     const importedFile = await this.doImportFile(file);
+                    log.info("Imported file: ", importedFile);
                     result.push(importedFile);
                 } catch (e) {
-                    log.error("Failed to import file: " + file, e);
+                    log.error("Failed to import file: ", e, file);
                 } finally {
                     DeterminateProgressBar.update(progressTracker.incr());
                 }
@@ -296,7 +307,7 @@ export class FileImportController {
 
     private async doImportFile(file: AddFileRequest): Promise<Optional<ImportedFile>> {
 
-        log.info("Importing file: " + file);
+        log.info("Importing file: ", file);
 
         const importedFileResult =
             await this.pdfImporter.importFile(file.docPath, file.basename);

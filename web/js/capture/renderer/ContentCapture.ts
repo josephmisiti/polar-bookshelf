@@ -54,13 +54,9 @@ export class ContentCapture {
 
                 /**
                  * The captured documents indexed by URL
-                 * @type {Object<String,Object>}
                  */
                 capturedDocuments: {},
 
-                // TODO: this should be something other chan chtml now.  This
-                // actually represents the format of the captured representation
-                // not the actual storage value on disk.
                 type: "phz",
 
                 version: "4.0.0",
@@ -121,7 +117,7 @@ export class ContentCapture {
                     ++nrHandled;
 
                 } else {
-                    console.log(`Skipping iframe: (${frameValidity})` + iframe.outerHTML);
+                    console.log(`Skipping iframe: ` + iframe.src, frameValidity, iframe.outerHTML);
                     ++nrSkipped;
                 }
 
@@ -146,12 +142,16 @@ export class ContentCapture {
         };
 
         if (! iframe.contentDocument) {
+            console.log("iframe not valid due to no contentDocument");
+
             return {reason: "NO_CONTENT_DOCUMENT", valid: false};
         }
 
         // TODO: only work with http and https URLs or about:blank
 
         if (iframe.style.display === "none") {
+
+            console.log("iframe not valid due to display:none");
 
             // TODO: we need a more practical mechanism to determine if we
             // are display none including visibility and calculated CSS and
@@ -170,7 +170,7 @@ export class ContentCapture {
             throw new Error("No cloneDoc");
         }
 
-        // FIXME: include a fingerprint in the output JSON which should probably
+        // TODO: include a fingerprint in the output JSON which should probably
         // be based on the URL.
 
         // TODO: store many of these fields in the HTML too because the iframes
@@ -235,6 +235,7 @@ export class ContentCapture {
             // structures are updated.
 
             result.mutations.cleanupRemoveScripts = ContentCapture.cleanupRemoveScripts(cloneDoc, url);
+            ContentCapture.removeNoScriptElements(cloneDoc);
             result.mutations.cleanupHead = ContentCapture.cleanupHead(cloneDoc, url);
             result.mutations.cleanupBase = ContentCapture.cleanupBase(cloneDoc, url);
             result.mutations.adsBlocked = AdBlocker.cleanse(cloneDoc, url);
@@ -303,7 +304,11 @@ export class ContentCapture {
 
     private static computeScrollBox(doc: Document): ScrollBox {
 
-        const computedStyle = getComputedStyle(doc.documentElement!);
+        if (! doc.documentElement) {
+            throw new Error("No document element");
+        }
+
+        const computedStyle = window.getComputedStyle(doc.documentElement!);
 
         return {
             width: doc.documentElement!.scrollWidth,
@@ -406,6 +411,20 @@ export class ContentCapture {
         }
 
         return result;
+
+    }
+
+
+    /**
+     * noscript elements must be removed because they weren't actually used
+     * as part of the original rendered page.
+     */
+    private static removeNoScriptElements(cloneDoc: Document) {
+
+        const elements = Array.from(cloneDoc.documentElement.querySelectorAll('noscript'));
+        for (const element of elements) {
+            element.parentElement!.removeChild(element);
+        }
 
     }
 
@@ -632,7 +651,20 @@ export class ContentCapture {
 
 }
 
-console.log("Content capture script loaded within: " + window.location.href);
+/**
+ * Generate IDs used for different internal content capture purposes
+ */
+export class IDGenerator {
+
+    private static id: number = 0;
+
+    public static generate() {
+        return this.id++;
+    }
+
+}
+
+// console.log("Content capture script loaded within: " + window.location.href);
 
 declare var global: any;
 

@@ -3,7 +3,6 @@ import {AnnotationSidebars} from './AnnotationSidebars';
 import {Logger} from '../logger/Logger';
 import {Splitter} from '../ui/splitter/Splitter';
 import {LocalPrefs} from '../util/LocalPrefs';
-import {AppRuntime} from '../AppRuntime';
 
 const log = Logger.create();
 
@@ -38,7 +37,8 @@ export class AnnotationSidebarService {
     private onDocumentLoaded(event: DocumentLoadedEvent) {
 
         log.debug("Creating annotation sidebar");
-        this.splitter = AnnotationSidebars.create(event.docMeta);
+        this.splitter = AnnotationSidebars.create(event.docMeta,
+                                                  this.model.persistenceLayerProvider);
 
         if (LocalPrefs.isMarked(PREF_SIDEBAR_OPEN)) {
             this.splitter.expand();
@@ -70,18 +70,6 @@ export class AnnotationSidebarService {
             LocalPrefs.mark(PREF_SIDEBAR_OPEN);
         } else {
             LocalPrefs.mark(PREF_SIDEBAR_OPEN, false);
-        }
-
-        this.sendResizeEvent();
-
-    }
-
-    private sendResizeEvent() {
-
-        if (AppRuntime.isBrowser()) {
-            const resizeEvent = window.document.createEvent('UIEvents');
-            resizeEvent .initUIEvent('resize', true, false, window, 0);
-            window.dispatchEvent(resizeEvent);
         }
 
     }

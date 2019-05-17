@@ -11,15 +11,17 @@ import {Optional} from '../../../util/ts/Optional';
 import {DocMeta} from '../../../metadata/DocMeta';
 import {DocMetas} from '../../../metadata/DocMetas';
 import {Backend} from '../../../datastore/Backend';
-import {DocFileMeta} from '../../../datastore/DocFileMeta';
 import {AppRuntime} from '../../../AppRuntime';
 import {FileRef} from '../../../datastore/Datastore';
-import {WritableBinaryMetaDatastore} from '../../../datastore/Datastore';
+import {BackendFileRef} from '../../../datastore/Datastore';
 import {LoadExampleDocsMeta} from './LoadExampleDocsMeta';
 import {Hashcode} from '../../../metadata/Hashcode';
 import {HashAlgorithm} from '../../../metadata/Hashcode';
 import {HashEncoding} from '../../../metadata/Hashcode';
 import {DocInfo} from '../../../metadata/DocInfo';
+import {Datastores} from '../../../datastore/Datastores';
+import {PDFMeta} from '../importers/PDFMetadata';
+import {BackendFileRefs} from '../../../datastore/BackendFileRefs';
 
 const log = Logger.create();
 
@@ -283,18 +285,24 @@ export class LoadExampleDocs {
 
             if (AppRuntime.isElectron()) {
 
+                const pdfMeta: PDFMeta = {
+                    fingerprint: opts.fingerprint,
+                    nrPages: opts.nrPages,
+                    props: {}
+                };
+
                 const importedFile =
-                    await this.doImport(relativePath);
+                    await this.doImport(relativePath, pdfMeta);
 
                 if (importedFile.isPresent()) {
 
                     const docInfo = importedFile.get().docInfo;
                     const docMeta = await this.persistenceLayer.getDocMeta(docInfo.fingerprint);
-                    const ref = importedFile.get().fileRef;
+                    const backendFileRef = importedFile.get().backendFileRef;
 
                     return {
                         docMeta: docMeta!,
-                        ref
+                        backendFileRef: backendFileRef!
                     };
 
                 } else {
@@ -310,16 +318,17 @@ export class LoadExampleDocs {
                     hashcode: opts.hashcode
                 };
 
+                docMeta.docInfo.backend = Backend.PUBLIC;
                 docMeta.docInfo.filename = ref.name;
                 docMeta.docInfo.hashcode = ref.hashcode;
 
-                // note that we do NOt need to write to the datastore here
+                // note that we do NOT need to write to the datastore here
                 // as we will write below and Firebase is a bit slower for
                 // writes so we want to keep things as fast as possible.
 
                 return {
                     docMeta,
-                    ref
+                    backendFileRef: BackendFileRefs.toBackendFileRef(docMeta)!
                 };
 
             }
@@ -327,8 +336,6 @@ export class LoadExampleDocs {
         };
 
         const importedDoc = await doImport();
-
-        const docInfo = importedDoc.docMeta.docInfo;
 
         const docMeta = importedDoc.docMeta;
 
@@ -362,24 +369,8 @@ export class LoadExampleDocs {
             const datastore = this.persistenceLayer.datastore;
 
             if (datastore.id === 'firebase') {
-
-                // with Firebase we need to tell it how to get access to
-                // the data files
-
-                const backend = Backend.STASH;
-                const ref = importedDoc.ref;
-
-                const docFileMeta: DocFileMeta = {
-                    backend,
-                    ref,
-                    url: opts.url,
-                    meta: {}
-                };
-
-                const binaryDatastore = <WritableBinaryMetaDatastore> <any> datastore;
-
-                await binaryDatastore.writeFileMeta(backend, ref, docFileMeta);
-
+                // noop for now.. backing out usage of metadata as it's expensive
+                // to store this metadata and we really don't need it
             }
 
         }
@@ -389,7 +380,7 @@ export class LoadExampleDocs {
 
     }
 
-    private async doImport(relativePath: string): Promise<Optional<ImportedFile>> {
+    private async doImport(relativePath: string, pdfMeta: PDFMeta): Promise<Optional<ImportedFile>> {
 
         const appPath = AppPath.get();
 
@@ -400,7 +391,7 @@ export class LoadExampleDocs {
         const path = FilePaths.join(appPath, relativePath);
         const basename = FilePaths.basename(relativePath);
 
-        return await this.pdfImporter.importFile(path, basename);
+        return await this.pdfImporter.importFile(path, basename, {pdfMeta});
 
     }
 
@@ -443,6 +434,6 @@ interface DocOpts {
 interface ImportedDoc {
 
     readonly docMeta: DocMeta;
-    readonly ref: FileRef;
+    readonly backendFileRef: BackendFileRef;
 
 }

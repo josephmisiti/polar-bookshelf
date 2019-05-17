@@ -1,29 +1,71 @@
 import {PersistenceLayer} from "./PersistenceLayer";
-import {NULL_FUNCTION, ASYNC_NULL_FUNCTION} from "../util/Functions";
-import {Percentages} from '../util/Percentages';
-import {Backend} from './Backend';
-import {Blobs} from "../util/Blobs";
-import {ArrayBuffers} from "../util/ArrayBuffers";
+import {ASYNC_NULL_FUNCTION, NULL_FUNCTION} from "../util/Functions";
 import {AsyncFunction, AsyncWorkQueue} from '../util/AsyncWorkQueue';
-import {DocMetaFileRefs, DocMetaRef} from "./DocMetaRef";
-import {Datastore, DocMetaMutation, DocMetaSnapshotEvent, DocMetaSnapshotEventListener, FileRef, MutationType, SyncDoc, SyncDocMap, SyncDocs} from './Datastore';
+import {DocMetaRef} from "./DocMetaRef";
+import {Datastore, DocMetaSnapshotEvent, DocMetaSnapshotEventListener, SyncDoc, SyncDocMap, SyncDocs} from './Datastore';
+import {BackendFileRef} from './Datastore';
+import {Visibility} from './Datastore';
 import {UUIDs} from '../metadata/UUIDs';
-import {ProgressTracker, Progress, ProgressListener} from '../util/ProgressTracker';
+import {ProgressListener, ProgressTracker} from '../util/ProgressTracker';
 import {DocMetas} from '../metadata/DocMetas';
 import {DefaultPersistenceLayer} from './DefaultPersistenceLayer';
-import {Provider, AsyncProviders} from '../util/Providers';
 import {DocMeta} from '../metadata/DocMeta';
-import {IDocInfo} from '../metadata/DocInfo';
-import {Dictionaries} from '../util/Dictionaries';
 import {isPresent} from "../Preconditions";
-import {Optional} from "../util/ts/Optional";
-import {DocFileMeta} from "./DocFileMeta";
 import {URLs} from "../util/URLs";
 import {Logger} from "../logger/Logger";
+import {BackendFileRefs} from './BackendFileRefs';
 
 const log = Logger.create();
 
 export class PersistenceLayers {
+
+    /**
+     * Change visibility of the given DocMeta including setting the visibility
+     * itself on the DocInfo but also setting the visibility for the individual
+     * files.
+     *
+     */
+    public static async changeVisibility(store: PersistenceLayer,
+                                         docMeta: DocMeta,
+                                         visibility: Visibility) {
+
+        log.info("Changing document visibility changed to: ", visibility);
+
+        const backendFileRefs = BackendFileRefs.toBackendFileRefs(docMeta);
+
+        const writeFileOpts = {visibility, updateMeta: true};
+
+        const toWriteFilePromise = async (backendFileRef: BackendFileRef): Promise<void> => {
+
+            await store.writeFile(backendFileRef.backend,
+                                  backendFileRef,
+                                  undefined!,
+                                  writeFileOpts);
+
+        };
+
+        const toWriteFilePromises = (): ReadonlyArray<Promise<void>> => {
+            return backendFileRefs.map(current => toWriteFilePromise(current));
+        };
+
+        const toWriteDocMetaPromise = async (): Promise<void> => {
+
+            docMeta.docInfo.visibility = visibility;
+
+            await store.writeDocMeta(docMeta);
+
+        };
+
+        const writeFilePromises = toWriteFilePromises();
+        const writeDocMetaPromise = toWriteDocMetaPromise();
+
+        const promises = [...writeFilePromises, writeDocMetaPromise];
+
+        await Promise.all(promises);
+
+        log.info("Document visibility changed to: ", visibility);
+
+    }
 
     public static toPersistenceLayer(input: Datastore ): PersistenceLayer {
         return new DefaultPersistenceLayer(input);
@@ -112,6 +154,9 @@ export class PersistenceLayers {
                                            cloudSyncOrigin: SyncOrigin,
                                            listener: DocMetaSnapshotEventListener = ASYNC_NULL_FUNCTION): Promise<void> {
 
+        // log.notice("local: " + localSyncOrigin.datastore.id);
+        // log.notice("cloud: " + cloudSyncOrigin.datastore.id);
+
         log.notice("Transferring from local -> cloud...");
         const localToCloud = await PersistenceLayers.transfer(localSyncOrigin, cloudSyncOrigin, listener, 'local-to-cloud');
         log.notice("Transferring from local -> cloud...done", localToCloud);
@@ -147,48 +192,40 @@ export class PersistenceLayers {
             }
         };
 
-        async function handleSyncFile(syncDoc: SyncDoc, fileRef: FileRef) {
+        async function handleSyncFile(syncDoc: SyncDoc, fileRef: BackendFileRef) {
 
             ++result.files.total;
 
-            if (! await target.datastore.containsFile(Backend.STASH, fileRef)) {
-
-                let optionalFile: Optional<DocFileMeta>;
+            const containsFile = async (datastore: Datastore,
+                                        id: 'source' | 'target'): Promise<boolean> => {
 
                 try {
-                    optionalFile = await source.datastore.getFile(Backend.STASH, fileRef);
+                    return await datastore.containsFile(fileRef.backend, fileRef);
                 } catch (e) {
-                    log.error(`Could not get file ${fileRef.name} for doc with fingerprint: ${syncDoc.fingerprint}`, fileRef, e);
+                    log.error(`Could not get file ${fileRef.name} for doc with fingerprint: ${syncDoc.fingerprint} from ${id}`, fileRef, e);
                     throw e;
                 }
 
-                if (optionalFile.isPresent()) {
+            };
 
-                    // TODO: it would be better if we could make these streams
-                    // in the future to avoid reading these files into memory.
-                    // Some people might have PDF files that are >100MB.
+            const targetContainsFile = await containsFile(target.datastore, 'target');
 
-                    // TODO: I think part of this is that we can't transfer a
-                    // stream to the 'remote' worker that's performing the
-                    // actual writes to the DiskStore.
+            if (! targetContainsFile) {
 
-                    // TODO: additionally, we're going to need a way to report
-                    // progress of this operation between the process
-                    // boundaries. We need to have callbacks work so that we
-                    // can determine the throughput of some of the larger
-                    // attachments.
+                const sourceContainsFile =  await containsFile(source.datastore, 'source');
 
-                    // FIXME: make this a dedicated function to transfer between
-                    // do datastores... or at least a dedicated function to
-                    // read it in as a buffer
+                if (sourceContainsFile) {
 
-                    const file = optionalFile.get();
-                    const buffer = await URLs.toStream(file.url);
+                    const sourceFile = source.datastore.getFile(fileRef.backend, fileRef);
 
-                    await target.datastore.writeFile(file.backend, fileRef, buffer, file.meta);
+                    const blob = await URLs.toBlob(sourceFile.url);
+
+                    await target.datastore.writeFile(sourceFile.backend, fileRef, blob);
 
                     ++result.files.writes;
 
+                } else {
+                    log.warn(`Both the target and source files are missing in doc ${syncDoc.fingerprint} (${syncDoc.title}): `, fileRef);
                 }
 
             }
@@ -209,15 +246,11 @@ export class PersistenceLayers {
 
             for (const sourceSyncFile of sourceSyncDoc.files) {
 
-                // TODO: we're going to need some type of method to get all the
-                // files backing a DocMeta file when we start to use attachments
-                // like screenshots.
-
-                if (sourceSyncFile.ref.name) {
+                if (sourceSyncFile.name) {
                     // TODO: if we use the second queue it still locks up.
                     // await docFileAsyncWorkQueue.enqueue(async () =>
                     // handleStashFile(docFile));
-                    await handleSyncFile(sourceSyncDoc, sourceSyncFile.ref);
+                    await handleSyncFile(sourceSyncDoc, sourceSyncFile);
                 }
 
             }
@@ -239,7 +272,7 @@ export class PersistenceLayers {
             if (doWriteDocMeta) {
 
                 const data = await source.datastore.getDocMeta(sourceSyncDoc.fingerprint);
-                await target.datastore.write(sourceSyncDoc.fingerprint, data, sourceSyncDoc.docMetaFileRef.docInfo);
+                await target.datastore.write(sourceSyncDoc.fingerprint, data!, sourceSyncDoc.docMetaFileRef.docInfo);
 
                 ++result.docMeta.writes;
 
@@ -289,7 +322,7 @@ export class PersistenceLayers {
                 try {
                     await handleSyncDoc(sourceSyncDoc, targetSyncDoc);
                 } catch (e) {
-                    log.error("Unable to sync between source and target: ", {sourceSyncDoc, targetSyncDoc});
+                    log.error("Unable to sync between source and target: ", {sourceSyncDoc, targetSyncDoc}, e);
                 }
 
             };

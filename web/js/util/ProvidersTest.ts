@@ -2,6 +2,7 @@ import {assert} from 'chai';
 import {Provider, Providers} from "./Providers";
 import {TestingTime} from "../test/TestingTime";
 import {TimeDurations} from './TimeDurations';
+import {AsyncProviders} from './Providers';
 
 describe('Providers', function() {
 
@@ -52,6 +53,58 @@ describe('Providers', function() {
 
     });
 
+    it('toInterface', function() {
+
+        assert.equal('101', Providers.toInterface('101').get());
+
+        assert.equal('101', Providers.toInterface(() => '101').get());
+
+    });
+
 });
 
 
+
+describe('AsyncProviders', function() {
+
+    it('verify not resolved before first call', async function() {
+
+        // make sure the function is not resolved before we await it...
+
+        let resolved: boolean = false;
+
+        const memo = AsyncProviders.memoize(async () => {
+            resolved = true;
+        });
+
+        assert.equal(resolved, false);
+
+        await memo();
+
+        assert.equal(resolved, true);
+
+    });
+
+    it('verify only resolved once', async function() {
+
+        // make sure the function is not resolved before we await it...
+
+        let resolved: number = 0;
+
+        const memo = AsyncProviders.memoize(async () => {
+            ++resolved;
+        });
+
+        assert.equal(resolved, 0);
+        await memo();
+        assert.equal(resolved, 1);
+        await memo();
+        assert.equal(resolved, 1);
+        await memo();
+        assert.equal(resolved, 1);
+        await memo();
+        assert.equal(resolved, 1);
+
+    });
+
+});

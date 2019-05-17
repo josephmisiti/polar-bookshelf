@@ -2,7 +2,6 @@ import * as libpath from 'path';
 import * as os from 'os';
 import {Optional} from './ts/Optional';
 import {isPresent, Preconditions} from '../Preconditions';
-import url from 'url';
 
 /**
  * Work with file paths cross platform and work with the file separator using
@@ -17,9 +16,6 @@ export class FilePaths {
      * The OS specific file separator.
      */
     public static readonly SEP = libpath.sep;
-
-    // FIXME: THIS is the bug.. Windows just needs to die!  We're not properly
-    // building URI paths due to this issue now...
 
     /**
      * Create a path from the given parts regardless of their structure.
@@ -135,19 +131,49 @@ export class FilePaths {
 
     }
 
-    public static toFileURL(path: string) {
+    /**
+     * If the file ends with .txt, .pdf, .html then return the extension.
+     * @param path
+     */
+    public static toExtension(path: string): Optional<string> {
+
+        if (! isPresent(path)) {
+            return Optional.empty();
+        }
+
+        const matches = path.match(/\.([a-z0-9]{1,15})$/);
+
+        if (matches && matches.length === 2) {
+            return Optional.of(matches[1]);
+        }
+
+        return Optional.empty();
+
+    }
+
+    /**
+     * Convert this path to a file URL so that we can use it in an API that
+     * expects a URL.
+     */
+    public static toURL(path: string) {
 
         // https://stackoverflow.com/questions/20619488/how-to-convert-local-file-path-to-a-file-url-safely-in-node-js
 
         // TODO: The new pathToFileURL function added in NodeJS 10.12 and
         // Electron 3.0.89 is on 10.2 at the time so we can't use this function
-        // even though it's better.
+        // even though it's better.  We were using url.format which DOES work in
+        // node but not from the renderer process for some reason.
 
         Preconditions.assertTypeOf(path, 'string', 'path');
 
         path = FilePaths.resolve(path);
 
         if (this.SEP === '\\') {
+
+            // handle windows properly.
+
+            // TODO: I actually think this is wrong as on Windows a file could
+            // in theory have a forward slash
 
             path = path.replace(/\\/g, '/');
 
@@ -162,23 +188,36 @@ export class FilePaths {
 
     }
 
-    /**
-     * If the file ends with .txt, .pdf, .html then return the extension.
-     * @param path
-     */
-    public static toExtension(path: string): Optional<string> {
+    public static fromURL(url: string) {
 
-        if (! isPresent(path)) {
-            return Optional.empty();
+        if (! url.startsWith("file:")) {
+            throw new Error("Not a file URL: " + url);
         }
 
-        const matches = path.match(/\.([a-z0-9]{3,4})$/);
+        const parsedURL = new URL(url);
 
-        if (matches && matches.length === 2) {
-            return Optional.of(matches[1]);
+        // the URI pathname component is NOT decoded for us and we have to
+        // do this manually otherwise we will have '%20' instead of ' ' and
+        // other path encoding issues.
+        const pathname = decodeURIComponent(parsedURL.pathname);
+
+        // Replace the forward slash in the URL (which is safe because forward
+        // slash is always the
+        let path = pathname.replace(/\//g, this.SEP);
+
+        if (this.SEP === '\\' && path.match(/^\\[C-Z]:/)) {
+
+            // this is a windows file path and file URLs on windows look like
+            //
+            // file:///C:/path/to/file.txt
+            //
+            // and we just need to strip the first slash.
+
+            path = path.substring(1);
+
         }
 
-        return Optional.empty();
+        return path;
 
     }
 
@@ -205,7 +244,8 @@ export class BrowserFilePaths {
      *
      * @param path
      * @param ext
-     * @param sep Use a specific separator when given (not determined by platform)
+     * @param sep Use a specific separator when given (not determined by
+     *     platform)
      */
     public static basename(path: string, ext?: string) {
 

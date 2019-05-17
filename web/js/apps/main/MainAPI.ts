@@ -4,6 +4,9 @@ import {WebRequestHandler} from '../../backend/webserver/Webserver';
 import {Logger} from '../../logger/Logger';
 import {Capture} from '../../capture/Capture';
 import {MainAppController} from './MainAppController';
+import {Version} from '../../util/Version';
+import {FileImportClient} from '../repository/FileImportClient';
+import {FileImportRequests} from '../repository/FileImportRequests';
 
 const log = Logger.create();
 
@@ -24,6 +27,7 @@ export class MainAPI {
 
     public start(): void {
         this.startCaptureTriggerHandler();
+        this.startPingHandler();
     }
 
     private startCaptureTriggerHandler() {
@@ -51,13 +55,49 @@ export class MainAPI {
 
             const captureOpts = <Partial<CaptureOpts>> req.body;
 
-            res.status(200).send({});
+            if (captureOpts.contentType === 'application/pdf') {
 
-            this.mainAppController.cmdCaptureWebPageWithBrowser(captureOpts)
-                .catch(err => log.error("Unable to capture page: ", err));
+                FileImportClient.send(FileImportRequests.fromURLs([captureOpts.link!]));
+
+            } else {
+
+                this.mainAppController.cmdCaptureWebPageWithBrowser(captureOpts)
+                    .catch(err => log.error("Unable to capture page: ", err));
+
+            }
+
+            res.status(200).send({});
 
         });
 
     }
+
+    /**
+     * Used so that the chrome extension can ping the desktop app to see if
+     * it's active to enable/disable the sharing options.  We won't show the
+     * share button if the desktop app isn't active.
+     */
+    private startPingHandler() {
+
+        const path = "/rest/v1/ping";
+
+        this.webRequestHandler.post(path, (req: express.Request, res: express.Response) => {
+
+            res.header('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
+
+            const timestamp = Date.now();
+            const version = Version.get();
+
+            const data = {
+                timestamp,
+                version
+            };
+
+            res.status(200).send(data);
+
+        });
+
+    }
+
 
 }

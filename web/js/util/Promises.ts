@@ -1,8 +1,45 @@
 import {Logger} from '../logger/Logger';
+import {Latch} from './Latch';
+import {NULL_FUNCTION} from './Functions';
 
 const log = Logger.create();
 
 export class Promises {
+
+    /**
+     * Return the result of ANY of these promises and prefer a successful value
+     * but reject if ALL of them fail with the first error.
+     *
+     * We require at least 1 promise but you can specify up to N
+     */
+    public static async any<T>(p0: Promise<T>, ...morePromises: Array<Promise<T>>): Promise<T> {
+
+        const promises = [p0, ...morePromises];
+
+        const latch = new Latch<T>();
+
+        const errors: Error[] = [];
+
+        const onError = (err: Error) => {
+
+            errors.push(err);
+
+            if (errors.length === promises.length) {
+                latch.reject(errors[0]);
+            }
+
+        };
+
+        for (const promise of promises) {
+
+            promise.then(value => latch.resolve(value))
+                   .catch(err => onError(err));
+
+        }
+
+        return latch.get();
+
+    }
 
     /**
      * A promise based timeout.  This just returns a promise which returns
@@ -22,6 +59,7 @@ export class Promises {
         });
 
     }
+
 
     /**
      * Return a promise that returns a literal value.
@@ -54,6 +92,10 @@ export class Promises {
 
     }
 
+    public static async toVoidPromise(delegate: () => Promise<any>): Promise<void> {
+        await delegate();
+    }
+
     /**
      * Execute a function which is async and log any errors it generates.
      *
@@ -63,7 +105,14 @@ export class Promises {
      * @param func
      */
     public static executeLogged(func: () => Promise<any>) {
-        func().catch(err => log.error("Caught error: ", err))
+        func().catch(err => log.error("Caught error: ", err));
+    }
+
+    public static requestAnimationFrame(callback: () => void = NULL_FUNCTION) {
+        return new Promise(resolve => {
+            callback();
+            window.requestAnimationFrame(() => resolve());
+        });
     }
 
 }

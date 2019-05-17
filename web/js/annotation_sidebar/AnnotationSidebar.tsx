@@ -1,7 +1,6 @@
 import * as React from 'react';
 import {Logger} from '../logger/Logger';
 import {Comment} from '../metadata/Comment';
-import {DocMeta} from '../metadata/DocMeta';
 import {DocAnnotations} from './DocAnnotations';
 import {DocAnnotation} from './DocAnnotation';
 import {DocAnnotationIndex} from './DocAnnotationIndex';
@@ -12,69 +11,177 @@ import {TextHighlightModel} from '../highlights/text/model/TextHighlightModel';
 import {isPresent} from '../Preconditions';
 import {DocAnnotationComponent} from './annotations/DocAnnotationComponent';
 import {CommentModel} from './CommentModel';
-import {Ref, Refs} from '../metadata/Refs';
+import {Refs} from '../metadata/Refs';
 import {FlashcardModel} from './FlashcardModel';
 import {Flashcard} from '../metadata/Flashcard';
 import {ExportButton} from '../ui/export/ExportButton';
-import {ExportFormat, Exporters} from '../metadata/exporter/Exporters';
+import {Exporters, ExportFormat} from '../metadata/exporter/Exporters';
 import {SplitBar, SplitBarLeft, SplitBarRight} from '../../../apps/repository/js/SplitBar';
+import {PersistenceLayerProvider} from '../datastore/PersistenceLayer';
+import {Visibility} from '../datastore/Datastore';
+import {PersistenceLayers} from '../datastore/PersistenceLayers';
+import {SharingDatastores} from '../datastore/SharingDatastores';
+import {ShareContentButton} from '../apps/viewer/ShareContentButton';
+import {NULL_FUNCTION} from '../util/Functions';
+import {Doc} from '../metadata/Doc';
+import {AreaHighlight} from '../metadata/AreaHighlight';
 
 const log = Logger.create();
 
-export class AnnotationSidebar extends React.Component<AnnotationSidebarProps, AnnotationSidebarState> {
+const NoAnnotations = () => {
+    return (
+        <div className="p-2">
+
+            <h4 className="text-center text-muted">
+                No Annotations
+            </h4>
+
+            <p className="text-muted"
+               style={{fontSize: '16px'}}>
+
+                No annotations have yet been created. To create new
+                annotations create a
+                new <span style={{backgroundColor: "rgba(255,255,0,0.3)"}}>highlight</span> by
+                selecting text in the document.
+            </p>
+
+            <p className="text-muted"
+               style={{fontSize: '16px'}}>
+
+                The highlight will then be shown here and you can
+                then easily attach comments and flashcards to it
+                directly.
+            </p>
+
+        </div>
+    );
+};
+
+
+
+function createItems(render: IRender) {
+
+    // https://blog.cloudboost.io/for-loops-in-react-render-no-you-didnt-6c9f4aa73778
+
+    // TODO: I'm not sure what type of class a <div> or React element uses
+    // so using 'any' for now.
+
+    const result: any = [];
+
+    const {annotations} = render;
+
+    annotations.map(annotation => {
+        result.push (<DocAnnotationComponent key={annotation.id}
+                                             annotation={annotation}
+                                             persistenceLayerProvider={render.persistenceLayerProvider}
+                                             doc={render.doc}/>);
+    });
+
+
+    return result;
+
+}
+
+const AnnotationsBlock = (render: IRender) => {
+
+    if (render.annotations.length > 0) {
+        return createItems(render);
+    } else {
+        return <NoAnnotations/>;
+    }
+
+};
+
+const Annotations = (render: IRender) => {
+
+    return <div className="annotations">
+        <AnnotationsBlock {...render}/>
+    </div>;
+
+};
+
+export class AnnotationSidebar extends React.Component<IProps, IState> {
 
     private docAnnotationIndex: DocAnnotationIndex = new DocAnnotationIndex();
 
-    constructor(props: AnnotationSidebarProps, context: any) {
+    constructor(props: IProps, context: any) {
         super(props, context);
 
-        this.scrollToAnnotation = this.scrollToAnnotation.bind(this);
         this.onExport = this.onExport.bind(this);
 
-        const annotations = DocAnnotations.getAnnotationsForPage(props.docMeta);
+        this.state = {
+            annotations: []
+        };
+
+    }
+
+    private async init() {
+
+        const annotations = await DocAnnotations.getAnnotationsForPage(this.props.persistenceLayerProvider,
+                                                                       this.props.doc.docMeta);
 
         this.docAnnotationIndex
             = DocAnnotationIndexes.rebuild(this.docAnnotationIndex, ...annotations);
 
-        this.state = {
-            annotations: this.docAnnotationIndex.sortedDocAnnotation
-        };
+        this.setState({
+            annotations: this.docAnnotationIndex.sortedDocAnnotations
+        });
 
     }
 
     public componentDidMount(): void {
 
-        // TODO: remove all these listeners when the component unmounts...
+        this.init()
+            .catch(err => log.error("Failed init: ", err));
 
-        new AreaHighlightModel().registerListener(this.props.docMeta, annotationEvent => {
+        // TODO: remove all these listeners when the component unmounts... in
+        // our case though it never unmounts
+
+        const {docMeta} = this.props.doc;
+
+        new AreaHighlightModel().registerListener(docMeta, annotationEvent => {
+
+            const handleConversion = () => {
+
+                const converter = (annotationValue: AreaHighlight) => {
+
+                    const {persistenceLayerProvider} = this.props;
+                    return DocAnnotations.createFromAreaHighlight(persistenceLayerProvider,
+                                                                  docMeta,
+                                                                  annotationValue,
+                                                                  annotationEvent.pageMeta);
+                };
+
+                const docAnnotation =
+                    this.convertAnnotation(annotationEvent.value, converter);
+
+                this.handleAnnotationEvent(annotationEvent.id,
+                                           annotationEvent.traceEvent.mutationType,
+                                           docAnnotation);
+
+            };
+
+            handleConversion();
+
+        });
+
+        new TextHighlightModel().registerListener(this.props.doc.docMeta, annotationEvent => {
 
             const docAnnotation =
                 this.convertAnnotation(annotationEvent.value,
-                                       annotationValue => DocAnnotations.createFromAreaHighlight(annotationValue,
+                                       annotationValue => DocAnnotations.createFromTextHighlight(docMeta,
+                                                                                                 annotationValue,
                                                                                                  annotationEvent.pageMeta));
 
             this.handleAnnotationEvent(annotationEvent.id,
                                        annotationEvent.traceEvent.mutationType,
                                        docAnnotation);
-
         });
 
-        new TextHighlightModel().registerListener(this.props.docMeta, annotationEvent => {
-
-            const docAnnotation =
-                this.convertAnnotation(annotationEvent.value,
-                                       annotationValue => DocAnnotations.createFromTextHighlight(annotationValue,
-                                                                                                 annotationEvent.pageMeta));
-
-            this.handleAnnotationEvent(annotationEvent.id,
-                                       annotationEvent.traceEvent.mutationType,
-                                       docAnnotation);
-        });
-
-        new CommentModel().registerListener(this.props.docMeta, annotationEvent => {
+        new CommentModel().registerListener(this.props.doc.docMeta, annotationEvent => {
 
             const comment: Comment = annotationEvent.value || annotationEvent.previousValue;
-            const childDocAnnotation = DocAnnotations.createFromComment(comment, annotationEvent.pageMeta);
+            const childDocAnnotation = DocAnnotations.createFromComment(docMeta, comment, annotationEvent.pageMeta);
 
             this.handleChildAnnotationEvent(annotationEvent.id,
                                             annotationEvent.traceEvent.mutationType,
@@ -82,10 +189,10 @@ export class AnnotationSidebar extends React.Component<AnnotationSidebarProps, A
 
         });
 
-        new FlashcardModel().registerListener(this.props.docMeta, annotationEvent => {
+        new FlashcardModel().registerListener(this.props.doc.docMeta, annotationEvent => {
 
             const flashcard: Flashcard = annotationEvent.value || annotationEvent.previousValue;
-            const childDocAnnotation = DocAnnotations.createFromFlashcard(flashcard, annotationEvent.pageMeta);
+            const childDocAnnotation = DocAnnotations.createFromFlashcard(docMeta, flashcard, annotationEvent.pageMeta);
 
             this.handleChildAnnotationEvent(annotationEvent.id,
                                             annotationEvent.traceEvent.mutationType,
@@ -120,7 +227,7 @@ export class AnnotationSidebar extends React.Component<AnnotationSidebarProps, A
         const annotation = this.docAnnotationIndex.docAnnotationMap[ref.value];
 
         if (! annotation) {
-            log.warn("No annotation for ref:", annotation);
+            log.warn("No annotation for ref:", ref.value);
             return;
         }
 
@@ -149,10 +256,7 @@ export class AnnotationSidebar extends React.Component<AnnotationSidebarProps, A
                                   mutationType: MutationType,
                                   docAnnotation: DocAnnotation | undefined) {
 
-        if (mutationType === MutationType.INITIAL) {
-            // we already have the data properly.
-            return;
-        } else if (mutationType === MutationType.DELETE) {
+        if (mutationType === MutationType.DELETE) {
 
             this.docAnnotationIndex
                 = DocAnnotationIndexes.delete(this.docAnnotationIndex, id);
@@ -177,61 +281,14 @@ export class AnnotationSidebar extends React.Component<AnnotationSidebarProps, A
     private reload() {
 
         this.setState({
-            annotations: this.docAnnotationIndex.sortedDocAnnotation
+            annotations: this.docAnnotationIndex.sortedDocAnnotations
         });
-
-    }
-
-    private scrollToAnnotation(id: string, pageNum: number) {
-
-        const selector = `.page div[data-annotation-id='${id}']`;
-
-        const pageElements: HTMLElement[] = Array.from(document.querySelectorAll(".page"));
-        const pageElement = pageElements[pageNum - 1];
-
-        if (!pageElement) {
-            log.error(`Could not find page ${pageNum} of N pages: ${pageElements.length}`);
-            return;
-        }
-
-        this.scrollToElement(pageElement);
-
-        const annotationElement = document.querySelector(selector)! as HTMLElement;
-
-        this.scrollToElement(annotationElement);
-
-    }
-
-    private scrollToElement(element: HTMLElement) {
-
-        element.scrollIntoView({
-            behavior: 'auto',
-            block: 'center',
-            inline: 'center'
-        });
-
-    }
-
-    private createItems(annotations: DocAnnotation[]) {
-
-        // https://blog.cloudboost.io/for-loops-in-react-render-no-you-didnt-6c9f4aa73778
-
-        // TODO: I'm not sure what type of class a <div> or React element uses
-        // so using 'any' for now.
-
-        const result: any = [];
-
-        annotations.map(annotation => {
-            result.push (<DocAnnotationComponent key={annotation.id} annotation={annotation}/>);
-        });
-
-        return result;
 
     }
 
     private onExport(path: string, format: ExportFormat) {
 
-        Exporters.doExport(path, format, this.props.docMeta)
+        Exporters.doExport(path, format, this.props.doc.docMeta)
             .catch(err => log.error(err));
 
     }
@@ -240,7 +297,24 @@ export class AnnotationSidebar extends React.Component<AnnotationSidebarProps, A
 
         const { annotations } = this.state;
 
+        const persistenceLayer = this.props.persistenceLayerProvider();
+        const capabilities = persistenceLayer.capabilities();
+
+        const sharingEnabled =
+            this.props.doc.mutable &&
+            sessionStorage.getItem('sharing-enabled') === "true";
+
         const AnnotationHeader = () => {
+
+            const docMeta = this.props.doc.docMeta;
+
+            const onVisibilityChanged = async (visibility: Visibility) => {
+                await PersistenceLayers.changeVisibility(persistenceLayer, docMeta, visibility);
+            };
+
+            const createShareLink = async (): Promise<string | undefined> => {
+                return SharingDatastores.createURL(persistenceLayer, docMeta);
+            };
 
             if (annotations.length === 0) {
                 return (<div></div>);
@@ -248,18 +322,30 @@ export class AnnotationSidebar extends React.Component<AnnotationSidebarProps, A
 
             return (
 
-
                 <div className="p-1 pb-2 mb-3 border-bottom pl-1 pr-1">
 
                     <SplitBar>
 
                         <SplitBarLeft>
-                            <div style={{fontWeight: 'bold', fontSize: '14px'}}>Annotations</div>
+                            <div style={{
+                                    fontWeight: 'bold',
+                                    fontSize: '14px'
+                                 }}>
+                                Annotations
+                            </div>
                         </SplitBarLeft>
 
                         <SplitBarRight>
 
                             <ExportButton onExport={(path, format) => this.onExport(path, format)}/>
+
+                            <ShareContentButton hidden={! sharingEnabled}
+                                                datastoreCapabilities={capabilities}
+                                                createShareLink={createShareLink}
+                                                visibility={docMeta.docInfo.visibility}
+                                                onVisibilityChanged={onVisibilityChanged}
+                                                onDone={NULL_FUNCTION}/>
+
 
                         </SplitBarRight>
 
@@ -278,9 +364,7 @@ export class AnnotationSidebar extends React.Component<AnnotationSidebarProps, A
 
                 <AnnotationHeader/>
 
-                <div className="annotations">
-                    {this.createItems(annotations)}
-                </div>
+                <Annotations {...this.state} {...this.props}/>
 
             </div>
 
@@ -289,13 +373,15 @@ export class AnnotationSidebar extends React.Component<AnnotationSidebarProps, A
 
 }
 
-export interface AnnotationSidebarState {
-
-    annotations: DocAnnotation[];
+interface IProps {
+    readonly doc: Doc;
+    readonly persistenceLayerProvider: PersistenceLayerProvider;
 }
 
-
-export interface AnnotationSidebarProps {
-    readonly docMeta: DocMeta;
+interface IState {
+    readonly annotations: DocAnnotation[];
 }
 
+interface IRender extends IProps, IState {
+
+}

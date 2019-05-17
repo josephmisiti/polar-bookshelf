@@ -3,6 +3,7 @@ import {FilePaths} from '../../../util/FilePaths';
 import {DocMetas} from '../../../metadata/DocMetas';
 import {Logger} from '../../../logger/Logger';
 import {PDFMetadata} from './PDFMetadata';
+import {PDFMeta} from './PDFMetadata';
 import {Optional} from '../../../util/ts/Optional';
 import {FileHandle, Files} from '../../../util/Files';
 import {Hashcodes} from '../../../Hashcodes';
@@ -12,9 +13,17 @@ import {DatastoreFiles} from '../../../datastore/DatastoreFiles';
 import {DocInfo} from '../../../metadata/DocInfo';
 import {HashAlgorithm, Hashcode, HashEncoding} from '../../../metadata/Hashcode';
 import {IProvider} from '../../../util/Providers';
-import {BinaryFileData, FileRef} from '../../../datastore/Datastore';
+import {BinaryFileData} from '../../../datastore/Datastore';
+import {BackendFileRefData} from '../../../datastore/Datastore';
+import {BackendFileRef} from '../../../datastore/Datastore';
 import {URLs} from '../../../util/URLs';
 import {InputSources} from '../../../util/input/InputSources';
+import {AppRuntime} from '../../../AppRuntime';
+
+import fs from 'fs';
+import {Toaster} from '../../../ui/toaster/Toaster';
+import {Datastores} from '../../../datastore/Datastores';
+import {BackendFileRefs} from '../../../datastore/BackendFileRefs';
 
 const log = Logger.create();
 
@@ -30,6 +39,58 @@ export class PDFImporter {
         this.persistenceLayerProvider = persistenceLayerProvider;
     }
 
+    private async prefetch(docPath: string, basename: string): Promise<string> {
+
+        if (AppRuntime.isElectron() && URLs.isURL(docPath) && URLs.isWebScheme(docPath)) {
+
+            const url = docPath;
+            const downloadPath = FilePaths.join(FilePaths.tmpdir(), basename);
+
+            Toaster.info(`Downloading ${basename} ...`);
+
+            log.info(`Prefetching URL ${url} to: ${downloadPath}`);
+
+            const response = await fetch(url);
+
+            if (response.body) {
+
+                const reader = response.body.getReader();
+
+                let writeStream: fs.WriteStream | undefined;
+
+                try {
+
+                    writeStream = Files.createWriteStream(downloadPath);
+
+                    while (true) {
+
+                        const { done, value } = await reader.read();
+
+                        if (done) {
+                            break;
+                        }
+
+                        writeStream.write(value);
+
+                    }
+
+                } finally {
+
+                    if (writeStream) {
+                        writeStream.close();
+                    }
+
+                }
+
+                return downloadPath;
+            }
+
+        }
+
+        return docPath;
+
+    }
+
     /**
      *
      * @param docPath
@@ -38,7 +99,11 @@ export class PDFImporter {
      *                 not actually have the full metadata we need that the
      *                 original input URL has given us.
      */
-    public async importFile(docPath: string, basename: string): Promise<Optional<ImportedFile>> {
+    public async importFile(docPath: string,
+                            basename: string,
+                            opts: PDFImportOpts = {}): Promise<Optional<ImportedFile>> {
+
+        docPath = await this.prefetch(docPath, basename);
 
         const isPath = ! URLs.isURL(docPath);
 
@@ -59,7 +124,7 @@ export class PDFImporter {
 
         }
 
-        const pdfMeta = await PDFMetadata.getMetadata(docPath);
+        const pdfMeta = opts.pdfMeta || await PDFMetadata.getMetadata(docPath);
 
         const persistenceLayer = this.persistenceLayerProvider.get();
 
@@ -75,16 +140,13 @@ export class PDFImporter {
 
                     // return the existing doc meta information.
 
-                    const fileRef = {
-                        name: docMeta.docInfo.filename,
-                        hashcode: docMeta.docInfo.hashcode
-                    };
+                    const backendFileRef = BackendFileRefs.toBackendFileRef(docMeta);
 
                     const basename = FilePaths.basename(docMeta.docInfo.filename);
                     return Optional.of({
                         basename,
                         docInfo: docMeta.docInfo,
-                        fileRef
+                        backendFileRef: backendFileRef!
                     });
 
                 }
@@ -123,18 +185,21 @@ export class PDFImporter {
         // also be danging if the user deleted the file.  Wasting space here is
         // a good thing.  Space is cheap.
 
-        const toData = async (): Promise<BinaryFileData> => {
+        const toBinaryFileData = async (): Promise<BinaryFileData> => {
 
             // TODO(webapp): make this into a toBlob function call
-            if (docPath.startsWith("blob:")) {
-                return await fetch(docPath).then(r => r.blob());
+            if (URLs.isURL(docPath)) {
+                log.info("Reading data from URL: ", docPath);
+                const response = await fetch(docPath);
+                const blob = await response.blob();
+                return blob;
             }
 
             return <FileHandle> {path: docPath};
 
         };
 
-        const data: BinaryFileData = await toData();
+        const binaryFileData: BinaryFileData = await toBinaryFileData();
 
         const docMeta = DocMetas.create(pdfMeta.fingerprint, pdfMeta.nrPages, filename);
 
@@ -155,14 +220,20 @@ export class PDFImporter {
             hashcode: docMeta.docInfo.hashcode
         };
 
-        await persistenceLayer.writeFile(Backend.STASH, fileRef, data);
+        const writeFile: BackendFileRefData = {
+            backend: Backend.STASH,
+            data: binaryFileData,
+            ...fileRef
+        };
 
-        await persistenceLayer.write(pdfMeta.fingerprint, docMeta);
+        await persistenceLayer.write(pdfMeta.fingerprint, docMeta, {writeFile});
+
+        const backendFileRef = BackendFileRefs.toBackendFileRef(docMeta);
 
         return Optional.of({
             basename,
             docInfo: docMeta.docInfo,
-            fileRef
+            backendFileRef: backendFileRef!
         });
 
     }
@@ -209,18 +280,23 @@ export interface ImportedFile {
     /**
      * The DocInfo for the file we just imported.
      */
-    docInfo: DocInfo;
+    readonly docInfo: DocInfo;
 
     /**
      * The basename of the file imported.
      */
-    basename: string;
+    readonly basename: string;
 
-    fileRef: FileRef;
+    readonly backendFileRef: BackendFileRef;
 
 }
 
 interface FileHashMeta {
-    hashPrefix: string;
-    hashcode: string;
+    readonly hashPrefix: string;
+
+    readonly hashcode: string;
+}
+
+interface PDFImportOpts {
+    readonly pdfMeta?: PDFMeta;
 }

@@ -1,34 +1,46 @@
 import * as firebase from './lib/firebase';
+import {RendererAnalytics} from '../ga/RendererAnalytics';
+import {AsyncProviders} from '../util/Providers';
+import {Firebase} from './Firebase';
+
+const tracer = RendererAnalytics.createTracer('firestore');
+
+const opts: FirestoreOptions = {enablePersistence: true};
 
 export class Firestore {
 
-    private static firestore?: firebase.firestore.Firestore;
+    private static firestoreProvider = AsyncProviders.memoize(async () => await Firestore.createInstance(opts));
 
-    public static async getInstance(opts: FirestoreOptions = {}): Promise<firebase.firestore.Firestore> {
+    public static async getInstance(): Promise<firebase.firestore.Firestore> {
+        Firebase.init();
 
-        if (this.firestore) {
-            return this.firestore;
-        }
-
-        return this.firestore = await this.createInstance(opts);
-
+        return await this.firestoreProvider();
     }
 
-    public static async createInstance(opts: FirestoreOptions = {}): Promise<firebase.firestore.Firestore> {
+    private static async createInstance(opts: FirestoreOptions = {}): Promise<firebase.firestore.Firestore> {
 
-        const result = firebase.firestore();
+        return await tracer.traceAsync('createInstance', async () => {
 
-        const settings = {
-            // timestampsInSnapshots: true
-        };
+            const result = firebase.firestore();
 
-        result.settings(settings);
+            const settings = {
+                // timestampsInSnapshots: true
+            };
 
-        if (opts.enablePersistence) {
-            await result.enablePersistence({experimentalTabSynchronization: true});
-        }
+            result.settings(settings);
 
-        return result;
+            if (opts.enablePersistence) {
+
+                // TODO: this seems super slow and not sure why.  The tab sync
+                // seems to not impact performance at all.
+                await tracer.traceAsync('enablePersistence', async () => {
+                    await result.enablePersistence({ experimentalTabSynchronization: true });
+                });
+            }
+
+            return result;
+
+        });
 
     }
 

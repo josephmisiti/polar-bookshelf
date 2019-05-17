@@ -1,8 +1,8 @@
 /* eslint react/no-multi-comp: 0, react/prop-types: 0 */
 import React from 'react';
 import {Splash} from '../../Splash';
-import {EmbeddedImages} from '../whats_new/EmbeddedImages';
-import {SplitLayout, SplitLayoutLeft, SplitLayoutRight} from '../../../../../../web/js/ui/split_layout/SplitLayout';
+import {SplitLayout, SplitLayoutLeft} from '../../../../../../web/js/ui/split_layout/SplitLayout';
+import {SplitLayoutRight} from '../../../../../../web/js/ui/split_layout/SplitLayoutRight';
 import {CallToActionLink} from '../components/CallToActionLink';
 
 export class Premium extends React.Component<IProps, IState> {
@@ -84,9 +84,11 @@ export class Premium extends React.Component<IProps, IState> {
 
         };
 
+        const settingKey = this.props.settingKey || 'premium';
+
         return (
 
-            <Splash settingKey={this.props.settingKey}
+            <Splash settingKey={settingKey}
                     disableClose={true}
                     disableDontShowAgain={true}>
 
@@ -102,6 +104,10 @@ export class Premium extends React.Component<IProps, IState> {
                             future Polar development. The more Polar is
                             user-supported, the freer we are to make Polar the
                             best it can be.
+                        </p>
+
+                        <p className="h5">
+                            All for less than the prices of a <b>cup of coffee!</b>
                         </p>
 
                     </SplitLayoutLeft>
@@ -198,7 +204,7 @@ export class Premium extends React.Component<IProps, IState> {
 
                     <PurchaseLink href="https://opencollective.com/polar-bookshelf/contribute/tier/6661-silver"
                                   eventCategory="splash-polar-premium-silver">
-                        Purchase Silver $7.99 per month
+                        Purchase Silver $9.99 per month
                     </PurchaseLink>
 
                 </div>
@@ -211,7 +217,7 @@ export class Premium extends React.Component<IProps, IState> {
 }
 
 interface IProps {
-    readonly settingKey: string;
+    readonly settingKey?: string;
 }
 
 interface IState {

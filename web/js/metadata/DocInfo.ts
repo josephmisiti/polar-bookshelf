@@ -10,6 +10,9 @@ import {Tag} from '../tags/Tag';
 import {Hashcode} from './Hashcode';
 import {UUID} from './UUID';
 import {ReadingOverview} from './ReadingOverview';
+import {Visibility} from '../datastore/Datastore';
+import {Attachment} from './Attachment';
+import {Backend} from '../datastore/Backend';
 
 export class DocInfo extends SerializedObject implements IDocInfo {
 
@@ -26,6 +29,7 @@ export class DocInfo extends SerializedObject implements IDocInfo {
     public properties: {[id: string]: string} = {};
     public archived: boolean = false;
     public flagged: boolean = false;
+    public backend?: Backend;
     public filename?: string;
     public added?: ISODateTimeString;
     public tags?: {[id: string]: Tag} = {};
@@ -40,10 +44,12 @@ export class DocInfo extends SerializedObject implements IDocInfo {
     public referrer?: string;
     public shareStrategy?: ShareStrategy;
     public storedResources?: Set<StoredResource>;
-    public mutating?: boolean;
+    public mutating?: DocMutating;
     public published?: ISODateString | ISODateTimeString;
     public doi?: string;
     public readingPerDay?: ReadingOverview;
+    public visibility?: Visibility;
+    public attachments: {[id: string]: Attachment} = {};
 
     constructor(val: IDocInfo) {
 
@@ -59,7 +65,7 @@ export class DocInfo extends SerializedObject implements IDocInfo {
     public setup() {
 
         this.progress = Preconditions.defaultValue(this.progress, 0);
-        this.pagemarkType = Preconditions.defaultValue(this.pagemarkType, PagemarkType.SINGLE_COLUMN);
+        this.pagemarkType = this.pagemarkType || PagemarkType.SINGLE_COLUMN;
         this.properties = Preconditions.defaultValue(this.properties, {});
 
     }
@@ -150,6 +156,12 @@ export interface IDocInfo {
     flagged: boolean;
 
     /**
+     * The backend of the doc. We assume STASH by default but it could be PUBLIC
+     * for example docs.
+     */
+    backend?: Backend;
+
+    /**
      * The filename of this doc in the .stash directory.
      */
     filename?: string;
@@ -219,7 +231,7 @@ export interface IDocInfo {
      * try/finally block when updating this because if it's not set back to
      * false then writes will be lost.
      */
-    mutating?: boolean;
+    mutating?: DocMutating;
 
     /**
      * The time this document was originally published according to the
@@ -233,7 +245,25 @@ export interface IDocInfo {
 
     readingPerDay?: ReadingOverview;
 
+    /**
+     * The visibility of this document (private or public).  The default is
+     * private.
+     */
+    visibility?: Visibility;
+
+    attachments: {[id: string]: Attachment};
+
 }
+
+/**
+ * Change how we should handle documents mutating.
+ *
+ * 'batch' we're mutating as an entire batch.
+ *
+ * 'skip' do not write the DocMeta that's being mutated.  This meant for just
+ * updating in memory and not meant to actually perform any underlying action.
+ */
+export type DocMutating = 'batch' | 'skip';
 
 /**
  * How this document was shared
@@ -283,3 +313,5 @@ export interface Storage {
 export interface DiskUsage {
     readonly bytesUsed: number;
 }
+
+export type DocInfoLike = DocInfo | IDocInfo;

@@ -6,6 +6,7 @@ import {ViewerTours} from '../../apps/viewer/ViewerTours';
 import {Model} from '../../model/Model';
 import {Stopwatches} from '../../util/Stopwatches';
 import {AppRuntime} from '../../AppRuntime';
+import {WindowEvents} from '../../util/dom/WindowEvents';
 
 declare var window: any;
 
@@ -35,6 +36,8 @@ export class PDFViewer extends Viewer {
             log.notice("Document load time: " + stopwatch.stop());
             this.sendResizeEvent();
 
+            // this.handleChromeSelectionFix();
+
         });
 
         this.disableSidebarKeyboardHandling();
@@ -45,7 +48,7 @@ export class PDFViewer extends Viewer {
 
         return {
             fingerprint: this.currentDocFingerprint(),
-            title: window.PDFViewerApplication.pdfDocument.pdfInfo.title,
+            title: window.PDFViewerApplication.pdfDocument._pdfInfo.title,
             nrPages: window.PDFViewerApplication.pagesCount,
             filename: this.getFilename()
         };
@@ -73,10 +76,10 @@ export class PDFViewer extends Viewer {
 
         if (window.PDFViewerApplication &&
             window.PDFViewerApplication.pdfDocument &&
-            window.PDFViewerApplication.pdfDocument.pdfInfo &&
-            window.PDFViewerApplication.pdfDocument.pdfInfo.fingerprint != null) {
+            window.PDFViewerApplication.pdfDocument._pdfInfo &&
+            window.PDFViewerApplication.pdfDocument._pdfInfo.fingerprint != null) {
 
-            return window.PDFViewerApplication.pdfDocument.pdfInfo.fingerprint;
+            return window.PDFViewerApplication.pdfDocument._pdfInfo.fingerprint;
 
         }
 
@@ -85,10 +88,75 @@ export class PDFViewer extends Viewer {
     private sendResizeEvent() {
 
         if (AppRuntime.isBrowser()) {
-            const resizeEvent = window.document.createEvent('UIEvents');
-            resizeEvent .initUIEvent('resize', true, false, window, 0);
-            window.dispatchEvent(resizeEvent);
+            WindowEvents.sendResizeEvent();
         }
+
+    }
+
+    private handleChromeSelectionFix() {
+
+        // TODO: this doesn't seem to work.  Both FF and Chrome now seem to have
+        // similar bugs when selecting text and the selection window just jumps
+        // wildly to other parts of the DOM and seemingly gets the start and end
+        // ranges mixed up.
+
+        // Also, it SAY the even is cancelled but that doesn't actually seem to
+        // be the case.
+
+        // TODO: this code works BUT I still can't cancel the selection
+        // in the pdfjs viewer for some reason - I think because it has its
+        // own handlers setup to do selection manually.
+
+        document.body.addEventListener('mousemove', (event) => {
+
+            if (event.target instanceof HTMLElement) {
+
+                const hasActiveSelection = (): boolean => {
+
+                    const sel = window.getSelection();
+
+                    if (sel.rangeCount === 1 ) {
+                        const range = window.getSelection().getRangeAt(0);
+                        return ! range.collapsed;
+                    }
+
+                    return false;
+
+                };
+
+                const hasJumped = () => {
+
+                    if (event.target instanceof HTMLElement) {
+                        return Array.from(event.target.classList).includes("endOfContent");
+                    }
+
+                    return false;
+
+                };
+
+                if (hasJumped()) {
+
+                    if (hasActiveSelection()) {
+                        event.preventDefault();
+
+                        // console.log("FIXME: preventing");
+
+                        // event.stopPropagation();
+                        // event.stopImmediatePropagation();
+                    } else {
+                        // console.log("FIXME: no active selection");
+                    }
+
+                } else {
+                    // console.log("FIXME: allowing on: " + event.target.innerText, event.target );
+                }
+
+            } else {
+                // console.log("FIXME: not an element");
+            }
+
+
+        });
 
     }
 

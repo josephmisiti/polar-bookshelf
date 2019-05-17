@@ -47,12 +47,32 @@ export class EventBridge {
             return;
         }
 
-        iframe.contentDocument.body.addEventListener("keyup", this.keyListener.bind(this));
-        iframe.contentDocument.body.addEventListener("keydown", this.keyListener.bind(this));
+        iframe.contentDocument.defaultView!.addEventListener("wheel", event => {
 
-        iframe.contentDocument.body.addEventListener("mouseup", this.mouseListener.bind(this));
-        iframe.contentDocument.body.addEventListener("mousedown", this.mouseListener.bind(this));
-        iframe.contentDocument.body.addEventListener("contextmenu", this.mouseListener.bind(this));
+            event.preventDefault();
+
+            document.querySelector(".polar-viewer")!
+                .scrollBy(event.deltaX, event.deltaY);
+
+            return false;
+
+        }, {passive: false});
+
+        // TODO: intercept up/down/left/right/pgup and pgdn and re-send them to
+        // the main window.
+
+        iframe.contentDocument.defaultView!.addEventListener('mouseup', event => this.forwardWindowEvent(event));
+
+        iframe.contentDocument.body.addEventListener("keyup", this.forwardKeyboardEvent.bind(this));
+        iframe.contentDocument.body.addEventListener("keydown", this.forwardKeyboardEvent.bind(this));
+
+        iframe.contentDocument.body.addEventListener("mouseup", this.forwardMouseEvent.bind(this));
+        iframe.contentDocument.body.addEventListener("mousedown", this.forwardMouseEvent.bind(this));
+
+        iframe.contentDocument.body.addEventListener('contextmenu', (event) => {
+            this.forwardMouseEvent(event);
+            event.preventDefault();
+        });
 
         iframe.contentDocument.body.addEventListener("click", event => {
 
@@ -79,18 +99,18 @@ export class EventBridge {
                 }
 
             } else {
-                this.mouseListener(event);
+                this.forwardMouseEvent(event);
             }
 
         });
 
     }
 
-    private mouseListener(event: any) {
+    private forwardMouseEvent(event: any) {
 
-        let eventPoints = FrameEvents.calculatePoints(this.iframe, event);
+        const eventPoints = FrameEvents.calculatePoints(this.iframe, event);
 
-        let newEvent = new event.constructor(event.type, event);
+        const newEvent = new event.constructor(event.type, event);
 
         // TODO: the issue now , I think, is that these values need to be updated
         // vs the current scroll.x and scroll.y
@@ -104,7 +124,7 @@ export class EventBridge {
         Object.defineProperty(newEvent, "offsetX", {value: eventPoints.offset.x});
         Object.defineProperty(newEvent, "offsetY", {value: eventPoints.offset.y});
 
-        if(newEvent.pageX !== eventPoints.page.x) {
+        if (newEvent.pageX !== eventPoints.page.x) {
             throw new Error("Define of properties failed");
         }
 
@@ -112,11 +132,18 @@ export class EventBridge {
 
     }
 
-    private keyListener(event: any) {
+    private forwardKeyboardEvent(event: any) {
 
         const newEvent = new event.constructor(event.type, event);
-
         this.targetElement.dispatchEvent(newEvent);
+
+    }
+
+
+    private forwardWindowEvent(event: any) {
+
+        const newEvent = new event.constructor(event.type, event);
+        window.dispatchEvent(newEvent);
 
     }
 

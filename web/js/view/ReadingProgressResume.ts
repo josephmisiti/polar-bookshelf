@@ -1,15 +1,17 @@
-import {Arrays} from '../util/Arrays';
 import {Elements} from '../util/Elements';
 import {DocFormatFactory} from '../docformat/DocFormatFactory';
 import {DocMeta} from '../metadata/DocMeta';
 import {Pagemark} from '../metadata/Pagemark';
 import {Rects} from '../Rects';
-import {sort} from 'semver';
 import {Reducers} from '../util/Reducers';
 
 export class ReadingProgressResume {
 
     public static resume(docMeta: DocMeta) {
+        setTimeout(() => this.doResume(docMeta), 1);
+    }
+
+    private static doResume(docMeta: DocMeta) {
 
         const targetPagemark = this.computeTargetPagemark(docMeta);
 
@@ -75,9 +77,23 @@ export class ReadingProgressResume {
         // visible by computing the height of the window and shifting it
         const windowDelta = window.innerHeight * (0.2);
 
-        scrollParent.scrollTop = pageOffset.top + pagemarkHeight - windowDelta;
+        const newScrollTop = Math.floor(pageTop + pagemarkHeight - windowDelta);
+
+        scrollParent.scrollTop = newScrollTop;
 
         return true;
+
+    }
+
+    private static pdfjsVersion() {
+
+        const win = (<any> window);
+
+        if (win && win.pdfjsLib) {
+            return (win.pdfjsLib.version);
+        }
+
+        return undefined;
 
     }
 
@@ -87,6 +103,10 @@ export class ReadingProgressResume {
 
         if (docFormat.name === 'pdf') {
             return <HTMLElement> document.querySelector("#viewerContainer");
+        }
+
+        if (docFormat.name === 'html') {
+            return <HTMLElement> document.querySelector(".polar-viewer");
         }
 
         return  <HTMLElement> Elements.getScrollParent(element);

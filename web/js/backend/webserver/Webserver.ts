@@ -7,13 +7,13 @@ import {Preconditions} from '../../Preconditions';
 import {Paths} from '../../util/Paths';
 
 import express, {Express, RequestHandler} from 'express';
+import {NextFunction, Request, Response} from 'express';
 import serveStatic from 'serve-static';
 import {ResourceRegistry} from './ResourceRegistry';
 import * as http from "http";
 import * as https from "https";
-import {Capture} from '../../capture/Capture';
-import {CaptureOpts} from '../../capture/CaptureOpts';
 import {PathParams} from 'express-serve-static-core';
+import {FilePaths} from '../../util/FilePaths';
 
 const log = Logger.create();
 
@@ -59,8 +59,31 @@ export class Webserver implements WebRequestHandler {
         // TODO: add infinite caching if the files are woff2 web fonts...
         this.app.use(serveStatic(this.webserverConfig.dir, {immutable: true}));
 
+        for (const page of ['login.html', 'index.html']) {
+
+            // handle explicit paths of /login.html and /index.html like we
+            // do in the webapp.
+
+            const pagePath =
+                FilePaths.join(this.webserverConfig.dir, 'apps', 'repository', page);
+
+            this.app.use(`/${page}`,
+                         serveStatic(pagePath, {immutable: true}));
+
+        }
+
         this.app.use(express.json());
         this.app.use(express.urlencoded());
+
+        const requestLogger = (req: Request, res: Response, next: NextFunction) => {
+            console.info(`${req.method} ${req.url}`);
+            console.info(req.headers);
+            console.info();
+            console.info('====');
+            next();
+        };
+
+        // this.app.use(requestLogger);
 
         this.registerFilesHandler();
         this.registerResourcesHandler();

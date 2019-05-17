@@ -1,4 +1,5 @@
 import {Datastore, DocMetaMutation, DocMetaSnapshotBatch, DocMetaSnapshotEventListener, SnapshotResult} from './Datastore';
+import {NetworkLayer} from './Datastore';
 import {MemoryDatastore} from './MemoryDatastore';
 import {DiskDatastore} from './DiskDatastore';
 import {Logger} from '../logger/Logger';
@@ -20,6 +21,7 @@ const log = Logger.create();
 const ENV_POLAR_DATASTORE = 'POLAR_DATASTORE';
 
 export class Datastores {
+
     public static create(): Datastore {
 
         const name = process.env[ENV_POLAR_DATASTORE];
@@ -32,6 +34,7 @@ export class Datastores {
         return new DiskDatastore();
 
     }
+
 
     public static async getDocMetas(datastore: Datastore,
                                     listener: DocMetaListener,
@@ -143,7 +146,9 @@ export class Datastores {
     public static async purge(datastore: Datastore,
                               purgeListener: PurgeListener = NULL_FUNCTION) {
 
+        log.debug("Getting doc meta refs...");
         const docMetaFiles = await datastore.getDocMetaRefs();
+        log.debug("Getting doc meta refs...done");
 
         let completed: number = 0;
         const total: number = docMetaFiles.length;
@@ -163,6 +168,8 @@ export class Datastores {
             // directly which is error prone.
 
             work.push(async () => {
+
+                log.debug(`Purging file: ${docMetaFile.fingerprint} in datastore ${datastore.id}`);
 
                 const data = await datastore.getDocMeta(docMetaFile.fingerprint);
                 const docMeta = DocMetas.deserialize(data!, docMetaFile.fingerprint);
@@ -226,6 +233,25 @@ export class Datastores {
         return result;
 
     }
+
+    /**
+     * Assert that the specified network layer is supported by this datastore.
+     */
+    public static assertNetworkLayer(datastore: Datastore, networkLayer?: NetworkLayer) {
+
+        if (! networkLayer) {
+            // we support this because it's not specified.
+            return;
+        }
+
+        const capabilities = datastore.capabilities();
+
+        if (! capabilities.networkLayers.has(networkLayer)) {
+            throw new Error(`Datastore '${datastore.id}' does not support ${networkLayer} only ${capabilities.networkLayers}`);
+        }
+
+    }
+
 
 }
 

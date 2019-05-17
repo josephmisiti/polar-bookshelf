@@ -4,6 +4,74 @@ import {FirebaseUIAuth} from '../../../web/js/firebase/FirebaseUIAuth';
 import * as firebase from '../../../web/js/firebase/lib/firebase';
 import {URLs} from '../../../web/js/util/URLs';
 import {AppRuntime} from '../../../web/js/AppRuntime';
+import {Optional} from '../../../web/js/util/ts/Optional';
+import {RendererAnalytics} from '../../../web/js/ga/RendererAnalytics';
+
+class SignInSuccessURLs {
+
+    /**
+     * Get the right sign in URL either the default or a custom if specified
+     * by a URL param.
+     */
+    public static get() {
+
+        return Optional.first(this.getCustom(), this.getDefault()).get();
+
+    }
+
+    /**
+     * Allow the user to set a custom signInSuccessUrl as a param.
+     */
+    private static getCustom(): string | undefined {
+
+        const url = new URL(document.location!.href);
+
+        return Optional.of(url.searchParams.get('signInSuccessUrl'))
+            .getOrUndefined();
+
+    }
+
+    private static getDefault(): string {
+
+        const base = URLs.toBase(document.location!.href);
+
+        const signInPath
+            = AppRuntime.isBrowser() ? "/" : '/apps/repository/index.html#configured';
+
+        return new URL(signInPath, base).toString();
+
+    }
+
+}
+
+class InitialLogin {
+
+    public static get() {
+
+        const key = "has-login";
+
+        const result = localStorage.getItem(key) !== 'true';
+
+        localStorage.setItem(key, 'true');
+
+        return result;
+
+    }
+
+    public static sentAnalytics() {
+
+        if (this.get()) {
+
+            const runtime = AppRuntime.type();
+            const category = runtime + '-login';
+            RendererAnalytics.event({category, action: 'initial'});
+
+        }
+
+    }
+
+}
+
 
 window.addEventListener('load', async () => {
 
@@ -11,16 +79,15 @@ window.addEventListener('load', async () => {
 
     if (firebase.auth().currentUser === null) {
 
-        const base = URLs.toBase(document.location!.href);
-
-        const signInPath
-            = AppRuntime.isBrowser() ? "/" : '/apps/repository/index.html#configured';
-
-        const signInSuccessUrl = new URL(signInPath, base).toString();
+        const signInSuccessUrl = SignInSuccessURLs.get();
 
         FirebaseUIAuth.login({signInSuccessUrl});
 
     }
+
+    RendererAnalytics.pageviewFromLocation();
+
+    InitialLogin.sentAnalytics();
 
 });
 

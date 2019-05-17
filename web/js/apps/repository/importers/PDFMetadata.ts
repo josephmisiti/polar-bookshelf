@@ -28,13 +28,7 @@ export class PDFMetadata {
             if (URLs.isURL(input)) {
                 return input;
             } else {
-
-                return url.format({
-                    protocol: 'file',
-                    slashes: true,
-                    pathname: FilePaths.resolve(docPathOrURL),
-                });
-
+                return FilePaths.toURL(docPathOrURL);
             }
 
         };
@@ -115,7 +109,7 @@ export interface PDFMeta {
     readonly link?: string;
 
     /**
-     * Full / raw list of mettadata properties.
+     * Full / raw list of metadata properties.
      */
     readonly props: Readonly<Props>;
 

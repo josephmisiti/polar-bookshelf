@@ -5,16 +5,29 @@ import {RepoAnnotations} from './RepoAnnotations';
 import {Logger} from "../../../web/js/logger/Logger";
 import {RepoDocInfo} from './RepoDocInfo';
 import {isPresent} from '../../../web/js/Preconditions';
+import {PersistenceLayerProvider} from '../../../web/js/datastore/PersistenceLayer';
 
 const log = Logger.create();
 
 export class RepoDocMetas {
 
-    public static isValid(repoDocMeta?: RepoDocMeta) {
-        return repoDocMeta && isPresent(repoDocMeta.repoDocInfo.filename);
+    public static isValid(repoDocMeta?: RepoDocMeta): RepoDocValidity {
+
+        if (! repoDocMeta) {
+            return 'no-value';
+        }
+
+        if (! isPresent(repoDocMeta.repoDocInfo.filename)) {
+            return 'no-filename';
+        }
+
+        return 'valid';
+
     }
 
-    public static convert(fingerprint: string, docMeta?: DocMeta): RepoDocMeta | undefined {
+    public static convert(persistenceLayerProvider: PersistenceLayerProvider,
+                          fingerprint: string,
+                          docMeta?: DocMeta): RepoDocMeta | undefined {
 
         if (! docMeta) {
             log.warn("No docMeta for file: ", fingerprint);
@@ -27,10 +40,12 @@ export class RepoDocMetas {
         }
 
         const repoDocInfo = RepoDocInfos.convert(docMeta.docInfo);
-        const repoAnnotations = RepoAnnotations.convert(docMeta);
+        const repoAnnotations = RepoAnnotations.convert(persistenceLayerProvider, docMeta);
 
         return {repoDocInfo, repoAnnotations};
 
     }
+
 }
 
+export type RepoDocValidity = 'valid' | 'no-value' | 'no-filename';

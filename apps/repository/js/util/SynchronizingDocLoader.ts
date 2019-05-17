@@ -1,11 +1,8 @@
-import {FileRef} from '../../../../web/js/datastore/Datastore';
-import {Backend} from '../../../../web/js/datastore/Backend';
+import {BackendFileRef} from '../../../../web/js/datastore/Datastore';
 import {PersistenceLayerManager} from '../../../../web/js/datastore/PersistenceLayerManager';
-import {Hashcode} from '../../../../web/js/metadata/Hashcode';
 import {Logger} from '../../../../web/js/logger/Logger';
 import {DocLoader} from '../../../../web/js/apps/main/doc_loaders/DocLoader';
 import {AppRuntime} from '../../../../web/js/AppRuntime';
-import {Stopwatches} from '../../../../web/js/util/Stopwatches';
 
 const log = Logger.create();
 
@@ -19,29 +16,15 @@ export class SynchronizingDocLoader {
         this.docLoader = new DocLoader(persistenceLayerManager);
     }
 
-    public async load(fingerprint: string,
-                      filename: string,
-                      hashcode?: Hashcode) {
-
-        const stopwatch = Stopwatches.create();
+    public async load(fingerprint: string, backendFileRef: BackendFileRef) {
 
         const persistenceLayer = this.persistenceLayerManager.get();
 
-        const fileRef: FileRef = {
-            name: filename,
-            hashcode
-        };
-
         const docLoaderRequest = this.docLoader.create({
              fingerprint,
-             fileRef,
+             backendFileRef,
              newWindow: true
         });
-
-        const ref: FileRef = {
-            name: filename,
-            hashcode
-        };
 
         if (AppRuntime.isElectron()) {
 
@@ -51,7 +34,7 @@ export class SynchronizingDocLoader {
             // way to verify that the file needs to be synchronized.
             const requiresSynchronize =
                 ! await persistenceLayer.contains(fingerprint) ||
-                ! await persistenceLayer.containsFile(Backend.STASH, ref);
+                ! await persistenceLayer.containsFile(backendFileRef.backend, backendFileRef);
 
             if (requiresSynchronize) {
                 await persistenceLayer.synchronizeDocs({fingerprint});

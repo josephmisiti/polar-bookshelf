@@ -1,9 +1,8 @@
 import {Preconditions} from './Preconditions';
 import {keccak256} from 'js-sha3';
 import uuid from 'uuid';
-import stream from 'stream';
 import {InputSource} from './util/input/InputSource';
-import {InputData, InputListener, InputSources} from './util/input/InputSources';
+import {InputData, InputSources} from './util/input/InputSources';
 
 // TODO: migrate this to use types.
 const base58check = require("base58check");
@@ -13,9 +12,11 @@ const base58check = require("base58check");
  */
 export class Hashcodes {
 
-    public static create(data: string): string {
-        Preconditions.assertNotNull(data, "data");
-        // return base58check.encode(createKeccakHash('keccak256').update(data).digest());
+    public static create(data: any): string {
+        Preconditions.assertPresent(data, "data");
+
+        data = typeof data === 'string' ? data : JSON.stringify(data);
+
         return base58check.encode(keccak256(data));
     }
 

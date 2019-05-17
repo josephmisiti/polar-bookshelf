@@ -1,30 +1,28 @@
 import {DocMeta} from '../metadata/DocMeta';
-import {ListenablePersistenceLayer} from '../datastore/ListenablePersistenceLayer';
 import {Batcher} from '../datastore/batcher/Batcher';
 import {TraceEvent} from '../proxies/TraceEvent';
 import {Logger} from '../logger/Logger';
 import {DocInfo} from '../metadata/DocInfo';
 import {Proxies} from '../proxies/Proxies';
+import {PersistenceLayerManagers} from '../datastore/PersistenceLayerManagers';
+import {PersistenceLayerHandler} from '../datastore/PersistenceLayerHandler';
 
 const log = Logger.create();
 
 export class ModelPersister {
 
-    public readonly docMeta: DocMeta;
-
     public nrWrites: number = 0;
 
     public nrDeferredWrites: number = 0;
 
-    private readonly persistenceLayer: ListenablePersistenceLayer;
-
-    constructor(persistenceLayer: ListenablePersistenceLayer, docMeta: DocMeta) {
-        this.persistenceLayer = persistenceLayer;
-        this.docMeta = docMeta;
+    constructor(private readonly persistenceLayerHandler: PersistenceLayerHandler,
+                public readonly docMeta: DocMeta) {
 
         const batcher = new Batcher(async () => {
 
-            await this.persistenceLayer.write(this.docMeta.docInfo.fingerprint, this.docMeta);
+            const persistenceLayer = this.persistenceLayerHandler.get();
+
+            await persistenceLayer.write(this.docMeta.docInfo.fingerprint, this.docMeta);
             ++this.nrWrites;
             this.nrDeferredWrites = 0;
 
@@ -33,7 +31,11 @@ export class ModelPersister {
         // create a new DocMeta proxy that updates on ANY update.
         this.docMeta = Proxies.create(this.docMeta, (traceEvent: TraceEvent) => {
 
-            if (this.docMeta.docInfo.mutating) {
+            if (this.docMeta.docInfo.mutating === 'skip') {
+                return;
+            }
+
+            if (this.docMeta.docInfo.mutating === 'batch') {
 
                 // skip bulk updates. This is done when we need to mutate multiple
                 // fields like setting 5-10 pagemarks at once or setting pagemarks
@@ -48,8 +50,7 @@ export class ModelPersister {
 
                 if (this.nrDeferredWrites <= 1) {
                     // we only have one deferred write and this is the toggling
-                    // of the mutating field.
-
+                    // of the mutating field OR we're skipping writes.
                     return;
                 }
 
@@ -60,7 +61,7 @@ export class ModelPersister {
             setTimeout(() => {
 
                 batcher.enqueue().run()
-                    .catch(err => log.error("Unable to commit to disk: ", err));
+                    .catch(err => log.error("Unable to persist: ", err));
 
             }, 0);
 
@@ -68,19 +69,23 @@ export class ModelPersister {
 
         });
 
-        // only accept DocInfo updates from the document we've opened.
-        this.persistenceLayer.addEventListenerForDoc(this.docMeta.docInfo.fingerprint, event => {
+        PersistenceLayerManagers.onPersistenceManager(this.persistenceLayerHandler, (persistenceLayer) => {
 
-            log.debug("Received updated DocInfo.");
+            // only accept DocInfo updates from the document we've opened.
+            persistenceLayer.addEventListenerForDoc(this.docMeta.docInfo.fingerprint, event => {
 
-            if (this.docMeta.docInfo.fingerprint !== event.docInfo.fingerprint) {
-                const detail = `${this.docMeta.docInfo.fingerprint} vs ${event.docInfo.fingerprint}`;
-                throw new Error(`Attempt to update incorrect fingerprint: ` + detail);
-            }
+                log.debug("Received updated DocInfo.");
 
-            this.docMeta.docInfo = new DocInfo(event.docInfo);
+                if (this.docMeta.docInfo.fingerprint !== event.docInfo.fingerprint) {
+                    const detail = `${this.docMeta.docInfo.fingerprint} vs ${event.docInfo.fingerprint}`;
+                    throw new Error(`Attempt to update incorrect fingerprint: ` + detail);
+                }
 
-        });
+                this.docMeta.docInfo = new DocInfo(event.docInfo);
+
+            });
+
+        }, 'changed');
 
     }
 

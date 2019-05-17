@@ -3,11 +3,11 @@ import {Logger} from '../../../../web/js/logger/Logger';
 import {ToggleButton} from '../../../../web/js/ui/ToggleButton';
 import {SimpleTooltip} from '../../../../web/js/ui/tooltip/SimpleTooltip';
 import {FilterTagInput} from '../FilterTagInput';
-import {DocRepoTableDropdown} from './DocRepoTableDropdown';
 import {TagsDB} from '../TagsDB';
 import {FilteredTags} from '../FilteredTags';
 import InputGroup from 'reactstrap/lib/InputGroup';
 import Input from 'reactstrap/lib/Input';
+import {SimpleTooltipEx} from '../../../../web/js/ui/tooltip/SimpleTooltipEx';
 
 const log = Logger.create();
 
@@ -52,12 +52,14 @@ export class DocRepoFilterBar extends React.Component<IProps, IState> {
 
                     <div className="checkbox-group">
 
-                        <ToggleButton id="toggle-flagged"
-                                      label="flagged"
-                                      initialValue={false}
-                                      onChange={value => this.props.onToggleFlaggedOnly(value)}/>
+                        <SimpleTooltipEx text="Only show flagged documents.">
 
-                        <SimpleTooltip target="toggle-flagged">Only show flagged documents.</SimpleTooltip>
+                            <ToggleButton id="toggle-flagged"
+                                          label="flagged"
+                                          initialValue={false}
+                                          onChange={value => this.props.onToggleFlaggedOnly(value)}/>
+
+                        </SimpleTooltipEx>
 
                     </div>
 
@@ -68,12 +70,18 @@ export class DocRepoFilterBar extends React.Component<IProps, IState> {
 
                     <div className="checkbox-group">
 
-                        <ToggleButton id="toggle-archived"
-                                      label="archived"
-                                      initialValue={false}
-                                      onChange={value => this.props.onToggleFilterArchived(value)}/>
+                        <SimpleTooltipEx text={`
+                                           Show both archived and unarchived
+                                           documents.  Archived documents are
+                                           hidden by default.
+                                         `}>
 
-                        <SimpleTooltip target="toggle-archived">Show both archived and unarchived documents.  Archived documents are hidden by default.</SimpleTooltip>
+                            <ToggleButton id="toggle-archived"
+                                          label="archived"
+                                          initialValue={false}
+                                          onChange={value => this.props.onToggleFilterArchived(value)}/>
+
+                        </SimpleTooltipEx>
 
                     </div>
 
@@ -85,31 +93,32 @@ export class DocRepoFilterBar extends React.Component<IProps, IState> {
                     <FilterTagInput id="filter-tag-input"
                                     tagsDBProvider={this.props.tagsDBProvider}
                                     refresher={this.props.refresher}
+                                    tooltip="Filter the document list by a specific tag."
                                     filteredTags={this.props.filteredTags} />
-
-                    <SimpleTooltip target="filter-tag-input">Filter the document list by a specific tag.</SimpleTooltip>
 
                 </div>
 
-                <div className="header-filter-box mr-1"
+                <div className="header-filter-box mr-1 d-none-mobile"
                      style={{whiteSpace: 'nowrap', marginTop: 'auto', marginBottom: 'auto'}}>
 
                     <div className="header-filter-box">
 
-                        <InputGroup size="sm">
 
-                            {/*<InputGroupAddon addonType="prepend">*/}
-                            {/*A*/}
-                            {/*</InputGroupAddon>*/}
+                        <SimpleTooltipEx text={`
+                                            Filter the document list by the title of the document.
+                                         `}>
 
-                            <Input id="filter_title"
-                                   type="text"
-                                   placeholder="Filter by title"
-                                   onChange={(value) => this.props.onFilterByTitle(value.target.value)}/>
+                            <InputGroup size="sm">
 
-                            <SimpleTooltip target="filter_title">Filter the document list by the title of the document.</SimpleTooltip>
+                                <Input id="filter_title"
+                                       type="text"
+                                       placeholder="Filter by title"
+                                       onChange={(value) => this.props.onFilterByTitle(value.target.value)}/>
 
-                        </InputGroup>
+                            </InputGroup>
+
+
+                        </SimpleTooltipEx>
 
                     </div>
 

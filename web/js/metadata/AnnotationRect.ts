@@ -106,9 +106,9 @@ export class AnnotationRect {
      *
      * @return {Rect}
      */
-    toFractionalRect() {
+    public toFractionalRect() {
 
-        let result = {
+        const result = {
             left: this.left / 100,
             top: this.top / 100,
             width: this.width / 100,
@@ -124,19 +124,39 @@ export class AnnotationRect {
      *
      * @return {Rect}
      */
-    toDimensions(dimensions: Dimensions) {
+    public toDimensions(dimensions: Dimensions) {
 
-        Preconditions.assertNotNull(dimensions, "dimensions");
+        Preconditions.assertPresent(dimensions, "dimensions");
 
-        let fractionalRect = this.toFractionalRect();
+        const fractionalRect = this.toFractionalRect();
+
+        // TODO: this will give us fractional pixels which I think is wrong.
 
         return Rects.createFromBasicRect({
             left: fractionalRect.left * dimensions.width,
             width: fractionalRect.width * dimensions.width,
             top: fractionalRect.top * dimensions.height,
             height: fractionalRect.height * dimensions.height,
-        })
+        });
 
     }
+
+    public toDimensionsFloor(dimensions: Dimensions) {
+
+        Preconditions.assertPresent(dimensions, "dimensions");
+
+        const fractionalRect = this.toFractionalRect();
+
+        // TODO: this will give us fractional pixels which I think is wrong.
+
+        return Rects.createFromBasicRect({
+            left: Math.floor(fractionalRect.left * dimensions.width),
+            width: Math.floor(fractionalRect.width * dimensions.width),
+            top: Math.floor(fractionalRect.top * dimensions.height),
+            height: Math.floor(fractionalRect.height * dimensions.height),
+        });
+
+    }
+
 
 }

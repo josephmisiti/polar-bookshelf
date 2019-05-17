@@ -16,12 +16,12 @@ import {ElectronContextType} from '../electron/context/ElectronContextType';
 import {ElectronContextTypes} from '../electron/context/ElectronContextTypes';
 import {ToasterLogger} from './ToasterLogger';
 import {PersistentErrorLogger} from './PersistentErrorLogger';
-import {isPresent} from '../Preconditions';
 
 import process from 'process';
 import {MemoryLogger} from './MemoryLogger';
 import {ISODateTimeString} from '../metadata/ISODateTimeStrings';
 import {AppRuntime} from '../AppRuntime';
+import {GALogger} from './GALogger';
 
 /**
  * Maintains our general logging infrastructure.  Differentiated from Logger
@@ -92,10 +92,16 @@ export class Logging {
 
         // *** next up is the Toaster Logger to visually show errors.
 
-        if (electronContext === ElectronContextType.RENDERER) {
+        if (['electron-renderer'].includes(AppRuntime.get())) {
             // use a ToasterLogger when running in the renderer context so that
             // we can bring up error messages for the user.
             loggers.push(new ToasterLogger());
+        }
+
+        if (['electron-renderer', 'browser'].includes(AppRuntime.get())) {
+            // use a ToasterLogger when running in the renderer context so that
+            // we can bring up error messages for the user.
+            loggers.push(new GALogger());
         }
 
         if (electronContext === ElectronContextType.RENDERER) {
@@ -174,9 +180,43 @@ export class Logging {
     }
 
     private static configuredLevel(): LogLevel {
-        return Optional.of(process.env.POLAR_LOG_LEVEL)
+
+        const isRendererContext = typeof window !== 'undefined';
+
+        const fromENV = (): Optional<string> => {
+            return Optional.of(process.env.POLAR_LOG_LEVEL);
+        };
+
+        const fromStorage = (storage: Storage): Optional<string> => {
+            return Optional.of(storage.getItem("POLAR_LOG_LEVEL"));
+        };
+
+        const fromLocalStorage = (): Optional<string> => {
+
+            if (isRendererContext) {
+                return fromStorage(window.localStorage);
+            }
+
+            return Optional.empty();
+
+        };
+
+        const fromSessionStorage = (): Optional<string> => {
+
+            if (isRendererContext) {
+                return fromStorage(window.sessionStorage);
+            }
+
+            return Optional.empty();
+
+        };
+
+        const level = Optional.first(fromENV(), fromLocalStorage(), fromSessionStorage())
             .map(level => LogLevels.fromName(level))
             .getOrElse(LogLevel.WARN);
+
+        return level;
+
     }
 
 }

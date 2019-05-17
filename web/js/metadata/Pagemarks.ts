@@ -15,11 +15,11 @@ import {ISODateTimeString, ISODateTimeStrings} from './ISODateTimeStrings';
 import {PageMeta, PageNumber} from './PageMeta';
 import {Numbers} from "../util/Numbers";
 import {Reducers} from '../util/Reducers';
-import {ProgressByMode, ReadingProgress} from './ReadingProgress';
 import {ReadingProgresses} from './ReadingProgresses';
 import {Provider} from '../util/Providers';
 import {HitMap} from '../util/HitMap';
 import {ReadingOverviews} from './ReadingOverviews';
+import {Percentages} from '../util/Percentages';
 
 const log = Logger.create();
 
@@ -112,8 +112,11 @@ export class Pagemarks {
 
             }
 
-            if (pagemarks.map(pagemark => pagemark.percentage)
-                         .reduce(Reducers.SUM, 0) === 100) {
+            const coverage: number =
+                pagemarks.map(pagemark => pagemark.percentage)
+                    .reduce(Reducers.SUM, 0);
+
+            if (Math.floor(coverage) === 100 || top === 100) {
 
                 // if this page is completely covered just ignore it
 
@@ -221,7 +224,12 @@ export class Pagemarks {
 
             // the rest are from options.
             type: options.type,
-            percentage: keyOptions.percentage,
+
+            // do NOT math.floor this.  It causes issues when percentages are
+            // less than 1 and for large pages the small changes can make a
+            // difference in pagemark placement
+            percentage: Numbers.toFixedFloat(keyOptions.percentage, 10),
+
             column: options.column,
             rect: keyOptions.rect,
             batch,
@@ -281,6 +289,14 @@ export class Pagemarks {
 
                 }
 
+            }
+
+            // noinspection JSSuspiciousNameCombination
+            if (Math.floor(pagemark.rect.top) === 100) {
+                // this is a broken pagemark where the top is at the end of the
+                // page which makes no sense.
+                delete result[key];
+                return;
             }
 
             if (! pagemark.id) {
@@ -509,9 +525,10 @@ export class Pagemarks {
 
         const writeReadingProgress = (preExisting?: boolean) => {
 
-            const progress = Object.values(pageMeta.pagemarks)
-                .map(current => current.percentage)
-                .reduce(Reducers.SUM, 0);
+            const percentages = Object.values(pageMeta.pagemarks)
+                .map(current => current.percentage);
+
+            const progress = Percentages.sum(...percentages);
 
             const progressByMode = createProgressByMode();
 

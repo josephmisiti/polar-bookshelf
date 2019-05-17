@@ -40,7 +40,8 @@ export const BROWSER_WINDOW_OPTIONS: Electron.BrowserWindowConstructorOptions = 
 
         // We are disabling web security now as a work around for CORS issues
         // when loading fonts.  Once we resolve this we can enable webSecurity
-        // again.
+        // again.  We can completely remove this once we migrate to a complete
+        // solution for PHZ files being stored in the browser.
         webSecurity: false,
 
         webaudio: true,
@@ -50,7 +51,7 @@ export const BROWSER_WINDOW_OPTIONS: Electron.BrowserWindowConstructorOptions = 
          * that we keep user cookies including Google Analytics cookies.
          */
         //
-        partition: "persist:polar"
+        partition: 'persist:polar-app'
 
     }
 
@@ -106,8 +107,6 @@ export class MainAppBrowserWindowFactory {
 
         }
 
-        log.info(`Creating window for URL: ${url} in partition ${browserWindowOptions.webPreferences!.partition}`);
-
         // Create the browser window.
         const browserWindow = new BrowserWindow(browserWindowOptions);
 
@@ -127,7 +126,8 @@ export class MainAppBrowserWindowFactory {
 
         browserWindow.webContents.on('new-window', (e, url) => {
             e.preventDefault();
-            shell.openExternal(url);
+            shell.openExternal(url)
+                .catch(err => log.error("Cloud open external URL", err, url));
         });
 
         browserWindow.webContents.on('will-navigate', (e, navURL) => {
@@ -159,12 +159,14 @@ export class MainAppBrowserWindowFactory {
             // required to force the URLs clicked to open in a new browser.  The
             // user probably / certainly wants to use their main browser.
             e.preventDefault();
-            shell.openExternal(navURL);
+            shell.openExternal(navURL)
+                .catch(err => log.error("Cloud open external URL", err, url));
 
         });
 
         log.info("Loading URL: " + url);
-        browserWindow.loadURL(url);
+        browserWindow.loadURL(url)
+            .catch(err => log.error("Cloud not load URL ", err, url));
 
         return new Promise<BrowserWindow>(resolve => {
 

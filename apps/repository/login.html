@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta name="theme-color" content="#000000">
 
+    <link rel="chrome-webstore-item"
+          href="https://chrome.google.com/webstore/detail/jkfdkjomocoaljglgddnmhcbolldcafd">
+
     <link rel="manifest" href="/manifest.json">
 
     <link rel="icon" href="/icon.ico">
@@ -59,8 +62,10 @@
 
       #auth-box {
         margin: auto;
-        height: 500px;
-        width: 450px;
+        max-height: 500px;
+        max-width: 450px;
+        width: 100%;
+        height: 100%;
         background-color: #ffffff;
       }
 
@@ -79,11 +84,14 @@
   <body>
     <noscript>
       You need to enable JavaScript to run this app.
+
+      <a href="https://getpolarized.io/">Powered by Polar</a>
+
     </noscript>
 
-    <div id="root">
+    <div id="root" class="p-2">
 
-      <div id="auth-box">
+      <div id="auth-box" class="">
 
         <div class="rounded border p-1">
 
@@ -97,7 +105,7 @@
 
           </div>
 
-          <div id="firebaseui-auth-container" ></div>
+          <div id="firebaseui-auth-container" class="p-1"></div>
 
         </div>
 
@@ -116,8 +124,12 @@
                   onclick="doDownloadDesktop()"
                   style="display: none;"
                   title="We also have a desktop version of Polar that runs on Windows, MacOS, or Linux."
-                  class="btn btn-small btn-light p-1 text-primary ml-1">
+                  class="btn btn-small btn-light p-1 text-primary ml-1 border">
+
+            <i class="fas fa-download"></i>
+
             Download Desktop
+
           </button>
 
         </div>
@@ -147,7 +159,7 @@
       }
 
       function doDownloadDesktop() {
-        document.location.href = 'https://getpolarized.io/download.html';
+        document.location.href = 'https://getpolarized.io/download.html?utm_source=getpolarized.io&utm_content=login-download-button&utm_medium=site';
       }
 
       function doInit() {

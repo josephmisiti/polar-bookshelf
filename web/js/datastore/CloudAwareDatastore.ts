@@ -1,5 +1,10 @@
-import {AbstractDatastore, BinaryFileData, Datastore, DeleteResult, DocMetaSnapshotEvent, DocMetaSnapshotEventListener, DocMetaSnapshotEvents, ErrorListener, FileMeta, FileRef, FileSynchronizationEvent, FileSynchronizationEventListener, InitResult, SnapshotResult, SyncDocMap, SyncDocMaps, SynchronizationEvent, SynchronizationEventListener, SynchronizingDatastore, DatastoreOverview, PrefsProvider} from './Datastore';
-import {Directories} from './Directories';
+import {AbstractDatastore, BinaryFileData, Datastore, DatastoreOverview, DeleteResult, DocMetaSnapshotEvent, DocMetaSnapshotEventListener, DocMetaSnapshotEvents, ErrorListener, FileRef, FileSynchronizationEvent, FileSynchronizationEventListener, InitResult, PrefsProvider, SnapshotResult, SyncDocMap, SyncDocMaps, SynchronizationEvent, SynchronizationEventListener, SynchronizingDatastore} from './Datastore';
+import {WriteFileOpts} from './Datastore';
+import {DatastoreCapabilities} from './Datastore';
+import {NetworkLayer} from './Datastore';
+import {GetFileOpts} from './Datastore';
+import {DatastoreInitOpts} from './Datastore';
+import {WriteOpts} from './Datastore';
 import {DocMetaFileRef, DocMetaRef} from './DocMetaRef';
 import {Backend} from './Backend';
 import {DocFileMeta} from './DocFileMeta';
@@ -17,7 +22,9 @@ import {IEventDispatcher, SimpleReactor} from '../reactor/SimpleReactor';
 import {AsyncFunction} from '../util/AsyncWorkQueue';
 import * as firebase from '../firebase/lib/firebase';
 import {Dictionaries} from '../util/Dictionaries';
-import {LocalStoragePrefs} from '../util/prefs/Prefs';
+import {Datastores} from './Datastores';
+import {Either} from '../util/Either';
+import {BackendFileRefs} from './BackendFileRefs';
 
 const log = Logger.create();
 
@@ -62,7 +69,8 @@ export class CloudAwareDatastore extends AbstractDatastore implements Datastore,
         this.cloud = cloud;
     }
 
-    public async init(errorListener: ErrorListener = NULL_FUNCTION): Promise<InitResult> {
+    public async init(errorListener: ErrorListener = NULL_FUNCTION,
+                      opts: DatastoreInitOpts = {noInitialSnapshot: false, noSync: false}): Promise<InitResult> {
 
         await Promise.all([
             this.cloud.init(errorListener, {noInitialSnapshot: true}),
@@ -71,7 +79,9 @@ export class CloudAwareDatastore extends AbstractDatastore implements Datastore,
 
         const snapshotListener = async (event: DocMetaSnapshotEvent) => this.docMetaSnapshotEventDispatcher.dispatchEvent(event);
 
-        this.primarySnapshot = await this.snapshot(snapshotListener, errorListener);
+        if (! opts.noSync) {
+            this.primarySnapshot = await this.snapshot(snapshotListener, errorListener);
+        }
 
         return {};
 
@@ -104,23 +114,36 @@ export class CloudAwareDatastore extends AbstractDatastore implements Datastore,
     public async writeFile(backend: Backend,
                            ref: FileRef,
                            data: BinaryFileData,
-                           meta: FileMeta = {}): Promise<DocFileMeta> {
+                           opts: WriteFileOpts = {}): Promise<DocFileMeta> {
 
+        const datastoreMutation = opts.datastoreMutation || new DefaultDatastoreMutation();
 
-        const result = this.local.writeFile(backend, ref, data, meta);
+        const result = await this.local.writeFile(backend, ref, data, opts);
+        datastoreMutation.written.resolve(true);
 
         // don't await the cloud write.  Once it's written locally we're fine
         // if it's not in the cloud we get an error logged and we should also
         // have task progress in the future.
-        this.cloud.writeFile(backend, ref, data, meta)
+        this.cloud.writeFile(backend, ref, data, opts)
+            .then(() => {
+                datastoreMutation.committed.resolve(true);
+            })
             .catch(err => log.error("Unable to write file to cloud: ", err));
 
         return result;
 
     }
 
-    public async getFile(backend: Backend, ref: FileRef): Promise<Optional<DocFileMeta>> {
-        return this.local.getFile(backend, ref);
+    public getFile(backend: Backend, ref: FileRef, opts: GetFileOpts = {}): DocFileMeta {
+
+        Datastores.assertNetworkLayer(this, opts.networkLayer);
+
+        if (! opts.networkLayer || opts.networkLayer === 'local') {
+            return this.local.getFile(backend, ref);
+        } else {
+            return this.cloud.getFile(backend, ref);
+        }
+
     }
 
     public containsFile(backend: Backend, ref: FileRef): Promise<boolean> {
@@ -163,7 +186,23 @@ export class CloudAwareDatastore extends AbstractDatastore implements Datastore,
     public async write(fingerprint: string,
                        data: string,
                        docInfo: DocInfo,
-                       datastoreMutation: DatastoreMutation<boolean> = new DefaultDatastoreMutation()): Promise<void> {
+                       opts: WriteOpts = {}): Promise<void> {
+
+        const datastoreMutation = opts.datastoreMutation || new DefaultDatastoreMutation();
+
+        const writeFileDatastoreMutation = new DefaultDatastoreMutation<boolean>();
+
+        if (opts.writeFile) {
+
+            await this.writeFile(opts.writeFile.backend,
+                                 opts.writeFile,
+                                 opts.writeFile.data,
+                                 {datastoreMutation: writeFileDatastoreMutation});
+
+        } else {
+            writeFileDatastoreMutation.written.resolve(true);
+            writeFileDatastoreMutation.committed.resolve(true);
+        }
 
         datastoreMutation
             .written.get().then(() => {
@@ -171,15 +210,22 @@ export class CloudAwareDatastore extends AbstractDatastore implements Datastore,
             this.docMetaComparisonIndex.updateUsingDocInfo(docInfo);
 
         })
-        // this should never fail in practice.
         .catch(err => log.error("Could not handle delete: ", err));
+
 
         await this.datastoreMutations.executeBatchedWrite(datastoreMutation,
                                                            async (remoteCoordinator) => {
-                                                               await this.cloud.write(fingerprint, data, docInfo, remoteCoordinator);
+
+                                                               // before we write the DocMeta data to the
+                                                               // cloud we have to wait until the file is
+                                                               // written.
+                                                               await writeFileDatastoreMutation.committed.get();
+
+                                                               await this.cloud.write(fingerprint, data, docInfo, {datastoreMutation: remoteCoordinator});
+
                                                            },
                                                            async (localCoordinator) => {
-                                                               await this.local.write(fingerprint, data, docInfo, localCoordinator);
+                                                               await this.local.write(fingerprint, data, docInfo, {datastoreMutation: localCoordinator});
                                                            });
 
     }
@@ -443,8 +489,20 @@ export class CloudAwareDatastore extends AbstractDatastore implements Datastore,
                 // we're also not receiving events for this in the UI so no
                 // progress updates.
                 const docMetaFileRef = await docMetaMutation.docMetaFileRefProvider();
-                log.warn("File deleted: " , docMetaFileRef);
+
+                // We have to handle deleting the binary files locally...
+                const fileRefs = BackendFileRefs.toBackendFileRefs(Either.ofRight(docMetaFileRef.docInfo));
+
+                for (const fileRef of fileRefs) {
+                    // TODO: do this in parallel...
+                    await this.local.deleteFile(fileRef.backend, fileRef);
+                }
+
+                // TODO: do both the main delete and each file delete in
+                // parallel.
+
                 await this.local.delete(docMetaFileRef);
+                log.info("File deleted: " , docMetaFileRef);
             }
 
         }
@@ -474,6 +532,19 @@ export class CloudAwareDatastore extends AbstractDatastore implements Datastore,
 
     public overview(): Promise<DatastoreOverview | undefined> {
         return this.local.overview();
+    }
+
+    public capabilities(): DatastoreCapabilities {
+
+        // we support both 'local' and 'web' here since this is a combination
+        // of both firebase and the disk datastore.
+        const networkLayers = new Set<NetworkLayer>(['local', 'web']);
+
+        return {
+            networkLayers,
+            permission: {mode: 'rw'}
+        };
+
     }
 
     public getPrefs(): PrefsProvider {

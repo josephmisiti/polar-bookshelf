@@ -1,4 +1,4 @@
-import {app, BrowserWindow, session} from 'electron';
+import {app, BrowserWindow} from 'electron';
 import {WebserverConfig} from '../../backend/webserver/WebserverConfig';
 import {FileRegistry} from '../../backend/webserver/FileRegistry';
 import {ProxyServerConfig} from '../../backend/proxyserver/ProxyServerConfig';
@@ -12,11 +12,10 @@ import {MainAppMenu} from './MainAppMenu';
 import {Cmdline} from '../../electron/Cmdline';
 import {Logger} from '../../logger/Logger';
 import {Datastore} from '../../datastore/Datastore';
-import {ScreenshotService} from '../../screenshots/ScreenshotService';
+import {ScreenshotService} from '../../screenshots/electron/ScreenshotService';
 import {DocLoaderService} from './doc_loaders/electron/ipc/DocLoaderService';
 import {AppLauncher} from './AppLauncher';
 import {DocInfoBroadcasterService} from '../../datastore/advertiser/DocInfoBroadcasterService';
-import {CachingStreamInterceptorService} from '../../backend/interceptor/CachingStreamInterceptorService';
 import process from "process";
 import {AppPath} from '../../electron/app_path/AppPath';
 import {MainAPI} from './MainAPI';
@@ -67,7 +66,7 @@ export class MainApp {
 
         const directories = new Directories();
 
-        const captureController = new CaptureController(cacheRegistry);
+        const captureController = new CaptureController(cacheRegistry, fileRegistry);
 
         const dialogWindowService = new DialogWindowService();
 
@@ -101,8 +100,6 @@ export class MainApp {
         // create a session and configure it for the polar which is persistent
         // across restarts so that we do not lose cookies, etc.
 
-        const mainSession = session.fromPartition('persist:polar');
-
         // mainSession.cookies.get({}, (err, cookies) => {
         //
         //     cookies.filter(cookie => {
@@ -111,17 +108,15 @@ export class MainApp {
         //
         // });
 
-        const cacheInterceptorService =
-            new CachingStreamInterceptorService(cacheRegistry, mainSession.protocol);
+        // const cacheInterceptorService =
+        //     new CachingStreamInterceptorService(cacheRegistry, mainSession.protocol);
 
-        await cacheInterceptorService.start()
-            .catch(err => log.error(err));
+        // await cacheInterceptorService.start()
+        //     .catch(err => log.error(err));
 
-        await captureController.start();
+        captureController.start();
 
         await dialogWindowService.start();
-
-        const userAgent = mainWindow.webContents.getUserAgent();
 
         const fileLoader = new AnalyticsFileLoader(defaultFileLoader);
 

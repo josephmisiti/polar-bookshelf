@@ -1,8 +1,8 @@
 
 export class DocumentReadyStates {
 
-    static async waitFor(doc: Document,
-                         requiredReadyState: DocumentReadyState): Promise<ReadyStateResolution> {
+    public static async waitFor(doc: Document,
+                                requiredReadyState: DocumentReadyState): Promise<ReadyStateResolution> {
 
         return this.waitForChanger(doc, requiredReadyState, new DocumentReadyStateChanger(doc));
 
@@ -103,7 +103,7 @@ export class DocumentReadyStateChanger implements ReadyStateChanger {
         this.readyState = doc.readyState
     }
 
-    awaitState(requiredReadyState: DocumentReadyState): Promise<void> {
+    async awaitState(requiredReadyState: DocumentReadyState): Promise<void> {
 
         // TODO: implementing this as an observable would definitely be better.
         // the interface for the mock and the document would be the same I
@@ -112,7 +112,7 @@ export class DocumentReadyStateChanger implements ReadyStateChanger {
 
             let listener: () => void = () => {
 
-                if(DocumentReadyStates.meetsRequiredState(requiredReadyState, this.doc.readyState)) {
+                if (DocumentReadyStates.meetsRequiredState(requiredReadyState, this.doc.readyState)) {
                     resolve();
                     this.doc.removeEventListener('readystatechange', listener);
                 }

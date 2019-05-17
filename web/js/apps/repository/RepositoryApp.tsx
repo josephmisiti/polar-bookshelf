@@ -30,8 +30,6 @@ import EditorsPicksApp from '../../../../apps/repository/js/editors_picks/Editor
 import {RendererAnalytics} from '../../ga/RendererAnalytics';
 import {Version} from '../../util/Version';
 import {LoadExampleDocs} from './onboarding/LoadExampleDocs';
-import {DefaultPersistenceLayer} from '../../datastore/DefaultPersistenceLayer';
-import {DiskDatastore} from '../../datastore/DiskDatastore';
 import {RepositoryTour} from './RepositoryTour';
 import {LocalPrefs} from '../../util/LocalPrefs';
 import {LifecycleEvents} from '../../ui/util/LifecycleEvents';
@@ -40,8 +38,15 @@ import {AppOrigin} from '../AppOrigin';
 import {AppRuntime} from '../../AppRuntime';
 import {AuthHandlers} from './auth_handler/AuthHandler';
 import Input from 'reactstrap/lib/Input';
-import {PreviewDisclaimers} from './PreviewDisclaimers';
-
+import {Premium} from '../../../../apps/repository/js/splash/splashes/premium/Premium';
+import {Splashes} from '../../../../apps/repository/js/splash2/Splashes';
+import {MobileDisclaimer} from './MobileDisclaimer';
+import {MobileDisclaimers} from './MobileDisclaimers';
+import {TabNav} from '../../ui/tabs/TabNav';
+import {NULL_FUNCTION} from '../../util/Functions';
+import {MachineDatastores} from '../../telemetry/MachineDatastores';
+import {MailingList} from './auth_handler/MailingList';
+import {UniqueMachines} from '../../telemetry/UniqueMachines';
 const log = Logger.create();
 
 export class RepositoryApp {
@@ -57,6 +62,8 @@ export class RepositoryApp {
 
     public async start() {
 
+        log.info("Running with Polar version: " + Version.get());
+
         AppOrigin.configure();
 
         const authHandler = AuthHandlers.get();
@@ -65,6 +72,10 @@ export class RepositoryApp {
             await authHandler.authenticate();
             return;
         }
+
+        // subscribe but do it in the background as this isn't a high priority UI task.
+        MailingList.subscribeWhenNecessary()
+            .catch(err => log.error(err));
 
         const updatedDocInfoEventDispatcher: IEventDispatcher<IDocInfo> = new SimpleReactor();
 
@@ -84,7 +95,13 @@ export class RepositoryApp {
 
         await this.doLoadExampleDocs();
 
+        MachineDatastores.triggerBackgroundUpdates(this.persistenceLayerManager);
+
+        UniqueMachines.trigger();
+
         // PreviewDisclaimers.createWhenNecessary();
+
+        MobileDisclaimers.createWhenNecessary();
 
         updatedDocInfoEventDispatcher.addEventListener(docInfo => {
             this.onUpdatedDocInfo(docInfo);
@@ -139,6 +156,10 @@ export class RepositoryApp {
             return ( <EditorsPicksApp persistenceLayerManager={this.persistenceLayerManager}/> );
         };
 
+        const premium = () => {
+            return (<Premium/>);
+        };
+
         const onNavChange = () => {
 
             try {
@@ -171,16 +192,49 @@ export class RepositoryApp {
 
             <div style={{height: '100%'}}>
 
-                <PrioritizedSplashes persistenceLayerManager={this.persistenceLayerManager}/>
+                {/*<PrioritizedSplashes persistenceLayerManager={this.persistenceLayerManager}/>*/}
+
+                <Splashes persistenceLayerManager={this.persistenceLayerManager}/>
 
                 <SyncBar progress={syncBarProgress}/>
 
                 <RepositoryTour/>
 
+                {/*TODO this doesn't actually work because the iframes aren't */}
+                {/*expanded properly I think. */}
+
+                {/*<TabNav addTabBinder={NULL_FUNCTION}*/}
+                        {/*initialTabs={[*/}
+                            {/*{*/}
+                                {/*title: "Repository",*/}
+                                {/*content: <div>*/}
+
+                                    {/*<HashRouter hashType="noslash">*/}
+
+                                        {/*<Switch>*/}
+                                            {/*<Route exact path='/(logout|overview|login|configured|invite|premium)?' render={renderDocRepoApp}/>*/}
+                                            {/*<Route exact path='/annotations' render={renderAnnotationRepoApp}/>*/}
+                                            {/*<Route exact path='/whats-new' render={renderWhatsNew}/>*/}
+                                            {/*<Route exact path='/community' render={renderCommunity}/>*/}
+                                            {/*<Route exact path='/stats' render={renderStats}/>*/}
+                                            {/*<Route exact path='/logs' render={renderLogs}/>*/}
+                                            {/*<Route exact path='/editors-picks' render={editorsPicks}/>*/}
+                                        {/*</Switch>*/}
+
+                                    {/*</HashRouter>*/}
+
+                                {/*</div>*/}
+                            {/*},*/}
+                            {/*{*/}
+                                {/*title: "How to be Successful",*/}
+                                {/*content: "http://localhost:8500/htmlviewer/index.html?file=http%3A%2F%2Flocalhost%3A8500%2Ffiles%2F12ftXRsX74J16Rmjwp85zhRswMstYCksLppdqCvnEeTz2Ut98ut&filename=12tTwL82eW-How_To_Be_Successful___Sam_Altman.phz&fingerprint=1TofZfqvEEcSgrNYi6Wo&zoom=page-width&strategy=portable"*/}
+                            {/*}*/}
+                        {/*]}/>*/}
+
                 <HashRouter hashType="noslash">
 
                     <Switch>
-                        <Route exact path='/(logout|overview|login|configured|invite)?' render={renderDocRepoApp}/>
+                        <Route exact path='/(logout|overview|login|configured|invite|premium)?' render={renderDocRepoApp}/>
                         <Route exact path='/annotations' render={renderAnnotationRepoApp}/>
                         <Route exact path='/whats-new' render={renderWhatsNew}/>
                         <Route exact path='/community' render={renderCommunity}/>
@@ -191,12 +245,21 @@ export class RepositoryApp {
 
                 </HashRouter>
 
+                <HashRouter hashType="noslash">
+
+                    <Switch>
+                        <Route exact path='/premium' render={premium}/>
+                    </Switch>
+
+                </HashRouter>
+
+
                 {/*Used for file uploads.  This has to be on the page and can't be*/}
                 {/*selectively hidden by components.*/}
                 <Input type="file"
                        id="file-upload"
                        name="file-upload"
-                       accept=".pdf"
+                       accept=".pdf, .PDF"
                        multiple
                        onChange={() => this.onFileUpload()}
                        style={{display: 'none'}}/>
@@ -301,15 +364,19 @@ export class RepositoryApp {
      */
     private onUpdatedDocInfo(docInfo: IDocInfo): void {
 
+        const persistenceLayerProvider = () => this.persistenceLayerManager.get();
+
         const handleUpdatedDocInfo = async () => {
 
             log.info("Received DocInfo update");
 
             const docMeta = await this.persistenceLayerManager.get().getDocMeta(docInfo.fingerprint);
 
-            const repoDocMeta = RepoDocMetas.convert(docInfo.fingerprint, docMeta);
+            const repoDocMeta = RepoDocMetas.convert(persistenceLayerProvider, docInfo.fingerprint, docMeta);
 
-            if (RepoDocMetas.isValid(repoDocMeta)) {
+            const validity = RepoDocMetas.isValid(repoDocMeta);
+
+            if (validity === 'valid') {
 
                 this.repoDocInfoManager.updateFromRepoDocMeta(docInfo.fingerprint, repoDocMeta);
 
@@ -344,7 +411,7 @@ export class RepositoryApp {
 
             } else {
 
-                log.warn("We were given an invalid DocInfo which yielded a broken RepoDocMeta: ",
+                log.warn(`We were given an invalid DocInfo which yielded a broken RepoDocMeta ${validity}: `,
                          docInfo, repoDocMeta);
 
             }

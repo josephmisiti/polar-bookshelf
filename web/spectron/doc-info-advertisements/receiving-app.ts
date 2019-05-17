@@ -4,7 +4,6 @@ import {MemoryDatastore} from '../../js/datastore/MemoryDatastore';
 import {DefaultPersistenceLayer} from '../../js/datastore/DefaultPersistenceLayer';
 import {AdvertisingPersistenceLayer} from '../../js/datastore/advertiser/AdvertisingPersistenceLayer';
 import {assertJSON} from '../../js/test/Assertions';
-import {Dictionaries} from '../../js/util/Dictionaries';
 import {canonicalize} from './testing';
 
 const log = Logger.create();
@@ -43,7 +42,8 @@ SpectronRenderer.run(async (state) => {
             "uuid": "4743a590-645c-11e1-809e-478d48422a2c",
             "readingPerDay": {
                 "2012-03-02": 1
-            }
+            },
+            "attachments": {}
 
         };
 
@@ -52,6 +52,7 @@ SpectronRenderer.run(async (state) => {
         console.log("Receiver SUCCESSFUL");
 
         state.testResultWriter.write(true)
+            .then(() => log.info("DONE"))
             .catch((err: Error) => {
                 log.error("Could not receive event.", err);
             });

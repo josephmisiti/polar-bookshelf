@@ -6,12 +6,9 @@ import {DocMetaDescriber} from '../metadata/DocMetaDescriber';
 import {forDict} from '../util/Functions';
 import {DocMeta} from '../metadata/DocMeta';
 import {Logger} from '../logger/Logger';
-import {Arrays} from '../util/Arrays';
-import {Elements} from '../util/Elements';
-import {ReadingProgressResume} from './ReadingProgressResume';
-import {LocalPrefs} from '../util/LocalPrefs';
-import {Prefs} from '../util/prefs/Prefs';
 import {PrefsProvider} from '../datastore/Datastore';
+import {ReadingProgressResume} from './ReadingProgressResume';
+import {RendererAnalytics} from '../ga/RendererAnalytics';
 
 const log = Logger.create();
 
@@ -23,7 +20,6 @@ export class WebView extends View {
 
     /**
      *
-     * @param model {Model}
      */
     constructor(model: Model, prefsProvider: PrefsProvider) {
         super(model);
@@ -37,8 +33,15 @@ export class WebView extends View {
 
         this.model.registerListenerForDocumentLoaded(event => this.onDocumentLoaded(event));
 
+        this.createTimer();
+
         return this;
 
+    }
+
+    private createTimer() {
+        const documentLoadTimer = RendererAnalytics.createTimer('document', 'loaded');
+        this.model.registerListenerForDocumentLoaded(event => documentLoadTimer.stop());
     }
 
     /**

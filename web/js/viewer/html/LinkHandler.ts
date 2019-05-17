@@ -3,6 +3,7 @@ import {IFrames} from '../../util/dom/IFrames';
 import {DocumentReadyStates} from '../../util/dom/DocumentReadyStates';
 import {Logger} from '../../logger/Logger';
 import {Events} from '../../util/dom/Events';
+import {Nav} from '../../ui/util/Nav';
 
 const log = Logger.create();
 
@@ -61,7 +62,7 @@ export class LinkHandler {
         doc.querySelectorAll('a')
             .forEach(anchor => anchor.addEventListener('keydown', event => {
 
-                if(event.key === 'Enter' || event.key === 'Return') {
+                if (event.key === 'Enter' || event.key === 'Return') {
                     event.preventDefault();
                     event.stopPropagation();
                     this.handleLinkEvent(event);
@@ -78,7 +79,15 @@ export class LinkHandler {
         if (anchor) {
             const href = anchor.href;
             log.info("Opening URL: " + href);
-            shell.openExternal(href);
+
+            if (shell) {
+                shell.openExternal(href)
+                    .catch(err => console.error(err));
+
+            } else {
+                Nav.openLinkWithNewTab(href);
+            }
+
         }
 
     }

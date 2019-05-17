@@ -12,6 +12,7 @@ import {forDict} from '../util/Functions';
 import {TextHighlights} from './TextHighlights';
 import {Preconditions} from '../Preconditions';
 import {Errors} from '../util/Errors';
+import {ISODateTimeStrings} from './ISODateTimeStrings';
 
 const log = Logger.create();
 
@@ -151,9 +152,6 @@ export class DocMetas {
 
         docMeta.pageMetas = PageMetas.upgrade(docMeta.pageMetas);
 
-        // TODO: go through and upgrade the pagemarks. I should probably have
-        // an upgrade function for each object type...
-
         if (!docMeta.annotationInfo) {
             // log.debug("No annotation info.. Adding default.");
             docMeta.annotationInfo = AnnotationInfos.create();
@@ -164,14 +162,7 @@ export class DocMetas {
             docMeta.attachments = {};
         }
 
-        if (docMeta.docInfo) {
-
-            if (!docMeta.docInfo.pagemarkType) {
-                // log.debug("DocInfo has no pagemarkType... Adding default of SINGLE_COLUMN");
-                docMeta.docInfo.pagemarkType = PagemarkType.SINGLE_COLUMN;
-            }
-
-        }
+        docMeta.docInfo = DocInfos.upgrade(docMeta.docInfo);
 
         return docMeta;
 
@@ -202,16 +193,34 @@ export class DocMetas {
      * Make changes to the document so that they write as one batched mutation
      * at the end.
      *
+     * @param docMeta The doc to mutate
+     *
      * @param mutator  The function to execute which will mutation the
      * underlying DocMeta properly.
      */
-    public static withBatchedMutations(docMeta: DocMeta, mutator: () => void) {
+    public static withBatchedMutations<T>(docMeta: DocMeta, mutator: () => T) {
+        return this.withMutating(docMeta, 'batch', mutator);
+    }
+
+    public static withSkippedMutations<T>(docMeta: DocMeta, mutator: () => T) {
+        return this.withMutating(docMeta, 'skip', mutator);
+    }
+
+    private static withMutating<T>(docMeta: DocMeta,
+                                   value: 'skip' | 'batch',
+                                   mutator: () => T) {
+
+        if (docMeta.docInfo.mutating === value) {
+            // we were called twice so don't reset itself in the finally block
+            // below to trigger too many updates. Just mutate directly.
+            return mutator();
+        }
 
         try {
 
-            docMeta.docInfo.mutating = true;
+            docMeta.docInfo.mutating = value;
 
-            mutator();
+            return mutator();
 
         } finally {
             // set it to undefined so that it isn't actually persisted in the
@@ -221,6 +230,13 @@ export class DocMetas {
 
     }
 
+
+    /**
+     * Force a write of the DocMeta
+     */
+    public static forceWrite(docMeta: DocMeta) {
+        docMeta.docInfo.lastUpdated = ISODateTimeStrings.create();
+    }
 
 }
 

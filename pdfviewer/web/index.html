@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <!--
 Copyright 2012 Mozilla Foundation
 
@@ -22,7 +22,6 @@ See https://github.com/adobe-type-tools/cmap-resources
 -->
 <html dir="ltr" mozdisallowselectionprint>
   <head>
-
     <meta charset="utf-8">
 
     <link rel="icon" href="/icon.ico">
@@ -32,7 +31,6 @@ See https://github.com/adobe-type-tools/cmap-resources
     <link rel="stylesheet" href="/node_modules/bootstrap/dist/css/bootstrap-grid.min.css">
     <link rel="stylesheet" href="/node_modules/bootstrap/dist/css/bootstrap-reboot.min.css">
     <link rel="stylesheet" href="/node_modules/summernote/dist/summernote-bs4.css">
-    <link rel="stylesheet" href="/node_modules/@fortawesome/fontawesome-free/css/all.min.css">
 
     <!--<link rel="stylesheet" href="/node_modules/@burtonator/react-buttons/dist/react-buttons.css">-->
     <link rel="stylesheet" href="/node_modules/@burtonator/react-dropdown/dist/react-dropdown.css">
@@ -58,30 +56,39 @@ See https://github.com/adobe-type-tools/cmap-resources
 
     <link rel="stylesheet" href="/pdfviewer-custom/polar.css">
 
+    <link rel="stylesheet" href="/node_modules/@fortawesome/fontawesome-free/css/all.min.css">
+
     <script src="/apps/init.js"></script>
+
+    <noscript>
+      You need to enable JavaScript to run this app.
+
+      <a href="https://getpolarized.io/">Powered by Polar</a>
+
+    </noscript>
 
     <script>
 
       const fallbackLoader = () => {
 
-          // REQUIRE_ENTRY_POINT: there seems to be an Electron bug where when
-          // loading over HTTP we can't find node_modules until we require().  We can
-          // only find standard modules like 'fs' and 'electron' but not custom
-          // modules so we have to just have these four lines repeated over and over
-          // for each of our main apps.  In the future we should try to track down
-          // why this is happening but I spent 1-2 hours on trying to figure out
-          // the root cause with no resolution and this is a temporary workaround.
+        // REQUIRE_ENTRY_POINT: there seems to be an Electron bug where when
+        // loading over HTTP we can't find node_modules until we require().  We can
+        // only find standard modules like 'fs' and 'electron' but not custom
+        // modules so we have to just have these four lines repeated over and over
+        // for each of our main apps.  In the future we should try to track down
+        // why this is happening but I spent 1-2 hours on trying to figure out
+        // the root cause with no resolution and this is a temporary workaround.
 
-          if (typeof require === 'function') {
+        if (typeof require === 'function') {
 
-              const {remote} = require('electron');
-              const path = require('path');
-              const appPath = remote.getGlobal("appPath");
+          const {remote} = require('electron');
+          const path = require('path');
+          const appPath = remote.getGlobal("appPath");
 
-              require(path.join(appPath, "web", "js", "apps", "electron.js"));
-          } else {
-              console.warn("Not running within Electron");
-          }
+          require(path.join(appPath, "web", "js", "apps", "electron.js"));
+        } else {
+          console.warn("Not running within Electron");
+        }
 
       }
 
@@ -91,15 +98,17 @@ See https://github.com/adobe-type-tools/cmap-resources
 
     <!-- END polar customization -->
 
+
     <!-- This snippet is used in production (included from viewer.html) -->
     <link rel="resource" type="application/l10n" href="locale/locale.properties">
+    <script src="../build/pdf.js"></script>
 
-    <script src="pdf.viewer.js"></script>
+
+    <script src="viewer.js"></script>
 
   </head>
 
   <body tabindex="1" class="loadingInProgress polar-pdfviewer">
-
     <div id="outerContainer" class="polar-viewer split split-horizontal">
 
       <div id="sidebarContainer">
@@ -142,11 +151,15 @@ See https://github.com/adobe-type-tools/cmap-resources
             </div>
           </div>
 
-          <div id="findbarOptionsContainer">
+          <div id="findbarOptionsOneContainer">
             <input type="checkbox" id="findHighlightAll" class="toolbarField" tabindex="94">
             <label for="findHighlightAll" class="toolbarLabel" data-l10n-id="find_highlight">Highlight all</label>
             <input type="checkbox" id="findMatchCase" class="toolbarField" tabindex="95">
             <label for="findMatchCase" class="toolbarLabel" data-l10n-id="find_match_case_label">Match case</label>
+          </div>
+          <div id="findbarOptionsTwoContainer">
+            <input type="checkbox" id="findEntireWord" class="toolbarField" tabindex="96">
+            <label for="findEntireWord" class="toolbarLabel" data-l10n-id="find_entire_word_label">Whole words</label>
             <span id="findResultsCount" class="toolbarLabel hidden"></span>
           </div>
 
@@ -206,54 +219,33 @@ See https://github.com/adobe-type-tools/cmap-resources
 
             <div class="horizontalToolbarSeparator"></div>
 
-            <button id="scrollVertical" class="secondaryToolbarButton scrollVertical toggled" title="Use Vertical Scrolling" tabindex="62" data-l10n-id="scroll_vertical">
+            <button id="scrollVertical" class="secondaryToolbarButton scrollModeButtons scrollVertical toggled" title="Use Vertical Scrolling" tabindex="62" data-l10n-id="scroll_vertical">
               <span data-l10n-id="scroll_vertical_label">Vertical Scrolling</span>
             </button>
-            <button id="scrollHorizontal" class="secondaryToolbarButton scrollHorizontal" title="Use Horizontal Scrolling" tabindex="63" data-l10n-id="scroll_horizontal">
+            <button id="scrollHorizontal" class="secondaryToolbarButton scrollModeButtons scrollHorizontal" title="Use Horizontal Scrolling" tabindex="63" data-l10n-id="scroll_horizontal">
               <span data-l10n-id="scroll_horizontal_label">Horizontal Scrolling</span>
             </button>
-            <button id="scrollWrapped" class="secondaryToolbarButton scrollWrapped" title="Use Wrapped Scrolling" tabindex="64" data-l10n-id="scroll_wrapped">
+            <button id="scrollWrapped" class="secondaryToolbarButton scrollModeButtons scrollWrapped" title="Use Wrapped Scrolling" tabindex="64" data-l10n-id="scroll_wrapped">
               <span data-l10n-id="scroll_wrapped_label">Wrapped Scrolling</span>
             </button>
 
-            <div class="horizontalToolbarSeparator"></div>
+            <div class="horizontalToolbarSeparator scrollModeButtons"></div>
 
-            <button id="spreadNone" class="secondaryToolbarButton spreadNone toggled" title="Do not join page spreads" tabindex="65" data-l10n-id="spread_none">
+            <button id="spreadNone" class="secondaryToolbarButton spreadModeButtons spreadNone toggled" title="Do not join page spreads" tabindex="65" data-l10n-id="spread_none">
               <span data-l10n-id="spread_none_label">No Spreads</span>
             </button>
-            <button id="spreadOdd" class="secondaryToolbarButton spreadOdd" title="Join page spreads starting with odd-numbered pages" tabindex="66" data-l10n-id="spread_odd">
+            <button id="spreadOdd" class="secondaryToolbarButton spreadModeButtons spreadOdd" title="Join page spreads starting with odd-numbered pages" tabindex="66" data-l10n-id="spread_odd">
               <span data-l10n-id="spread_odd_label">Odd Spreads</span>
             </button>
-            <button id="spreadEven" class="secondaryToolbarButton spreadEven" title="Join page spreads starting with even-numbered pages" tabindex="67" data-l10n-id="spread_even">
+            <button id="spreadEven" class="secondaryToolbarButton spreadModeButtons spreadEven" title="Join page spreads starting with even-numbered pages" tabindex="67" data-l10n-id="spread_even">
               <span data-l10n-id="spread_even_label">Even Spreads</span>
             </button>
 
-            <div class="horizontalToolbarSeparator"></div>
+            <div class="horizontalToolbarSeparator spreadModeButtons"></div>
 
             <button id="documentProperties" class="secondaryToolbarButton documentProperties" title="Document Properties…" tabindex="68" data-l10n-id="document_properties">
               <span data-l10n-id="document_properties_label">Document Properties…</span>
             </button>
-
-            <!-- BEGIN polar customization -->
-
-            <!--<div class="horizontalToolbarSeparator"></div>-->
-
-            <!--<button id="polarCreatePagemarksAcrossPages" class="secondaryToolbarButton documentProperties" title="">-->
-              <!--<span>Create pagemark range...</span>-->
-            <!--</button>-->
-
-            <!--<button id="polarCreatePagemarksAcrossPages2" class="secondaryToolbarButton polarCreatePagemarkRanges documentProperties fa fa-plus-circle polar-fa-button" title="Create pagemarks for pages...">-->
-              <!--&lt;!&ndash;<span>Create pagemarks for range</span>&ndash;&gt;-->
-              <!--<span>Document Properties...</span>-->
-            <!--</button>-->
-
-
-            <!--<button class="secondaryToolbarButton documentProperties" title="">-->
-              <!--<span>Create pagemarks for range</span>-->
-            <!--</button>-->
-
-            <!-- END polar customization -->
-
           </div>
         </div>  <!-- secondaryToolbar -->
 
@@ -288,6 +280,18 @@ See https://github.com/adobe-type-tools/cmap-resources
                 <button id="openFile" class="toolbarButton openFile hiddenLargeView" title="Open File" tabindex="32" data-l10n-id="open_file">
                   <span data-l10n-id="open_file_label">Open</span>
                 </button>
+
+                <!--
+                <div id="polar-toolbar-buttons">
+
+                  <button type="button"
+                          class="btn btn-primary"
+                          style="font-weight: bold; margin-top: auto; margin-bottom: auto; font-family: sans-serif; font-size: 14px; margin-top: 3px; padding: 2px; padding-left: 5px; padding-right: 5px;">
+                    Sharing
+                  </button>
+
+                </div>
+                -->
 
                 <button id="print" class="toolbarButton print hiddenMediumView" title="Print" tabindex="33" data-l10n-id="print">
                   <span data-l10n-id="print_label">Print</span>
@@ -356,45 +360,45 @@ See https://github.com/adobe-type-tools/cmap-resources
         </menu>
 
 
+
+
         <div id="viewerContainer" tabindex="0">
+          <!-- BEGIN polar customization -->
+          <div id="polar-header" class="polar-pdf-header" style="display: none;">
 
-            <!-- BEGIN polar customization -->
-            <div id="polar-header" class="polar-pdf-header" style="display: none;">
+            <div id="polar-header-body">
 
-              <div id="polar-header-body">
+              <div id="polar-progress">
+                <progress value="0.0"></progress>
+              </div>
 
-                <div id="polar-progress">
-                  <progress value="0.0"></progress>
+              <div id="set-title">
+                <div id="set-title-form">
+                  <input id="set-title-input" type="text" placeholder="Untitled" autocomplete="false">
+
                 </div>
-
-                <div id="set-title">
-                  <div id="set-title-form">
-                    <input id="set-title-input" type="text" placeholder="Untitled" autocomplete="false">
-
-                  </div>
-                </div>
-
               </div>
 
             </div>
+
+          </div>
 
           <!-- END polar customization -->
 
-            <div>
+          <div>
+            <div id="viewer" class="pdfViewer"></div>
+          </div>
 
-              <div id="viewer" class="pdfViewer">
 
+          <!-- BEGIN polar customization -->
+          <div id="polar-footer" style="display: none;">
+            <div id="polar-doc-overview"></div>
+          </div>
+          <!-- END polar customization -->
 
-              </div>
-            </div>
-
-            <!-- BEGIN polar customization -->
-            <div id="polar-footer" style="display: none;">
-                <div id="polar-doc-overview"></div>
-            </div>
-            <!-- END polar customization -->
 
         </div>
+
 
         <div id="errorWrapper" hidden='true'>
           <div id="errorMessageLeft">
@@ -474,6 +478,10 @@ See https://github.com/adobe-type-tools/cmap-resources
             <div class="row">
               <span data-l10n-id="document_properties_page_size">Page Size:</span> <p id="pageSizeField">-</p>
             </div>
+            <div class="separator"></div>
+            <div class="row">
+              <span data-l10n-id="document_properties_linearized">Fast Web View:</span> <p id="linearizedField">-</p>
+            </div>
             <div class="buttonRow">
               <button id="documentPropertiesClose" class="overlayButton"><span data-l10n-id="document_properties_close">Close</span></button>
             </div>
@@ -498,9 +506,9 @@ See https://github.com/adobe-type-tools/cmap-resources
     </div> <!-- outerContainer -->
     <div id="printContainer"></div>
 
-  <div style="display: none;" class="polar-sidebar split split-horizontal">
-    <div></div>
-  </div>
+    <div style="display: none;" class="polar-sidebar split split-horizontal">
+      <div></div>
+    </div>
 
   </body>
 </html>

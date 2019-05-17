@@ -10,7 +10,6 @@
     padding-top: 10px;
 }
 
-/* https://github.com/mozilla/pdf.js/issues/9843#issuecomment-433359365 */
-.textLayer > div {
-    height:200px;
+.polar-pdfviewer #polar-header-body {
+    margin-right: 10px;
 }

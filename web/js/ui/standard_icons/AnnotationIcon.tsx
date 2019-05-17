@@ -1,13 +1,13 @@
 import * as React from 'react';
-import {HighlightColor} from '../../metadata/BaseHighlight';
 import {AnnotationType} from '../../metadata/AnnotationType';
 import {FlashcardIcon} from './FlashcardIcon';
 import {CommentIcon} from './CommentIcon';
 import {HighlighterIcon} from './HighlighterIcon';
+import {HighlightColor} from '../../metadata/HighlightColor';
 
 /**
  */
-export class AnnotationIcon extends React.Component<IProps, IState> {
+export class AnnotationIcon extends React.PureComponent<IProps, IState> {
 
     constructor(props: IProps, context: any) {
         super(props, context);

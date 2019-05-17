@@ -10,7 +10,8 @@ import {Component} from '../../../../components/Component';
 import {DocFormatFactory} from '../../../../docformat/DocFormatFactory';
 import {Rects} from '../../../../Rects';
 import {Logger} from '../../../../logger/Logger';
-import {HighlightColor} from '../../../../metadata/BaseHighlight';
+import {HighlightColors} from '../../../../metadata/HighlightColor';
+import {HighlightColor} from '../../../../metadata/HighlightColor';
 
 const log = Logger.create();
 
@@ -106,8 +107,14 @@ export class TextHighlightComponent extends Component {
             highlightElement.className = `text-highlight annotation text-highlight-${textHighlight.id}`;
 
             highlightElement.style.position = "absolute";
-            // highlightElement.style.backgroundColor = `yellow`;
+            (highlightElement.style as any).mixBlendMode = 'multiply';
+
+            const backgroundColor = HighlightColors.toBackgroundColor(color, 0.5);
+
+            highlightElement.style.backgroundColor = backgroundColor;
             // highlightElement.style.opacity = `0.5`;
+
+            // toBackgroundColor
 
             if (this.docFormat.name === "pdf") {
                 // this is only needed for PDF and we might be able to use a transform

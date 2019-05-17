@@ -5,6 +5,8 @@ import {Logger} from '../../logger/Logger';
 import {AnnotationType} from '../../metadata/AnnotationType';
 import {AreaHighlightAnnotationComponent} from './AreaHighlightAnnotationComponent';
 import {TextHighlightAnnotationComponent} from './TextHighlightAnnotationComponent';
+import {Doc} from '../../metadata/Doc';
+import {PersistenceLayerProvider} from '../../datastore/PersistenceLayer';
 
 const log = Logger.create();
 
@@ -39,13 +41,17 @@ export class DocAnnotationComponent extends React.Component<IProps, IState> {
         if (annotation.annotationType === AnnotationType.AREA_HIGHLIGHT) {
 
             return (
-                <AreaHighlightAnnotationComponent key={key} annotation={annotation}/>
+                <AreaHighlightAnnotationComponent key={key}
+                                                  annotation={annotation}
+                                                  doc={this.props.doc}/>
             );
 
         } else {
 
             return (
-                <TextHighlightAnnotationComponent key={key} annotation={annotation}/>
+                <TextHighlightAnnotationComponent key={key}
+                                                  annotation={annotation}
+                                                  doc={this.props.doc}/>
             );
 
         }
@@ -55,7 +61,13 @@ export class DocAnnotationComponent extends React.Component<IProps, IState> {
 
 }
 interface IProps {
-    annotation: DocAnnotation;
+
+    readonly persistenceLayerProvider: PersistenceLayerProvider;
+
+    readonly annotation: DocAnnotation;
+
+    readonly doc: Doc;
+
 }
 
 interface IState {

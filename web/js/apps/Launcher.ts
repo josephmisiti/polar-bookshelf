@@ -5,14 +5,18 @@ import {Logger} from '../logger/Logger';
 import {Logging} from '../logger/Logging';
 import {WebView} from '../view/WebView';
 import {PagemarkView} from '../pagemarks/view/PagemarkView';
-import {ListenablePersistenceLayer} from '../datastore/ListenablePersistenceLayer';
-import {TextHighlightView2} from '../highlights/text/view/TextHighlightView2';
+import {TextHighlightView} from '../highlights/text/view/TextHighlightView';
 import {AnnotationSidebarService} from '../annotation_sidebar/AnnotationSidebarService';
-import {PageSearchController} from '../page_search/PageSearchController';
 import {CommentsController} from '../comments/CommentsController';
 import {AnnotationBarService} from '../ui/annotationbar/AnnotationBarService';
 import {AreaHighlightView} from "../highlights/area/view/AreaHighlightView";
-import {AppRuntime} from '../AppRuntime';
+import {AddContentImporters} from './viewer/AddContentImporters';
+import {Providers} from '../util/Providers';
+import {ProgressService} from '../ui/progress_bar/ProgressService';
+import {PersistenceLayerManager} from '../datastore/PersistenceLayerManager';
+import {AppOrigin} from './AppOrigin';
+import {CloudService} from '../../../apps/repository/js/cloud/CloudService';
+import {Version} from '../util/Version';
 
 const log = Logger.create();
 
@@ -23,33 +27,49 @@ const log = Logger.create();
  */
 export class Launcher {
 
-    private readonly persistenceLayerFactory: PersistenceLayerFactory;
-
-    /**
-     * Launch the app with the given launch function.
-     *
-     */
-    constructor(persistenceLayerFactory: PersistenceLayerFactory) {
-        this.persistenceLayerFactory = persistenceLayerFactory;
-    }
-
     /**
      * Trigger the launch function.
      */
     public async trigger() {
 
-        console.log("Running with app runtime: " + AppRuntime.get());
+        log.notice("Running with Polar version: " + Version.get());
 
-        const persistenceLayer = await this.persistenceLayerFactory();
-        await persistenceLayer.init();
+        AppOrigin.configure();
+
+        new ProgressService().start();
 
         await Logging.init();
 
-        const model = new Model(persistenceLayer);
+        const addContentImporter = AddContentImporters.create();
+
+        await addContentImporter.prepare();
+
+        const persistenceLayerManager = new PersistenceLayerManager({noSync: true, noInitialSnapshot: true});
+
+        new CloudService(persistenceLayerManager)
+            .start();
+
+        await persistenceLayerManager.start();
+
+        // import content with the 'add content' button automatically.
+
+        await addContentImporter.doImport(Providers.toInterface(persistenceLayerManager.get()));
+
+        const model = new Model(persistenceLayerManager);
 
         new PagemarkView(model).start();
-        new WebView(model, persistenceLayer.datastore.getPrefs()).start();
-        new TextHighlightView2(model).start();
+
+        const prefsProvider
+            = Providers.toInterface(() => {
+
+            const persistenceLayer = persistenceLayerManager.get();
+            const datastore = persistenceLayer.datastore;
+            return datastore.getPrefs().get();
+
+        });
+
+        new WebView(model, prefsProvider).start();
+        new TextHighlightView(model).start();
         new AreaHighlightView(model).start();
         new AnnotationSidebarService(model).start();
 
@@ -89,5 +109,3 @@ export class Launcher {
     }
 
 }
-
-export type PersistenceLayerFactory = () => Promise<ListenablePersistenceLayer>;
